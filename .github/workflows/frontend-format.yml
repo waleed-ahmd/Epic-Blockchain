@@ -1,0 +1,33 @@
+name: Frontend Formatting
+
+on:
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'src/**'
+      - '.prettierrc'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/frontend-format.yml'
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    name: Check Prettier Formatting
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run format:check
