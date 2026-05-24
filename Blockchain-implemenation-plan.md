@@ -1,34 +1,69 @@
-# Person 3 Blockchain Implementation Plan — Automatic Verification Flow (Remix Deployment)
+# Person 3 Blockchain Implementation Plan — Conversation Segment Merkle Root
 
 ## Scope
 
 This document covers only the blockchain integrity-verification component for the SecureMsg project.
 
-The blockchain component will:
+The blockchain component will record a `keccak256` Merkle root for a conversation segment on the Ethereum Sepolia testnet.
 
-1. Compute a `keccak256` digest of an encrypted message envelope.
-2. Store the digest on a Sepolia smart contract with a timestamp.
-3. Return a blockchain transaction hash and record ID.
-4. Store the blockchain proof against the backend message record.
-5. Allow the user to click **Verify Message** and automatically verify that the encrypted message envelope has not changed.
+The system will not store plaintext messages on-chain.  
+The system will not store full ciphertext messages on-chain.  
+Only the segment Merkle root and minimal proof metadata are stored on-chain.
 
 Do not implement penetration testing in this phase.  
-Do not implement authentication, end-to-end encryption, backend login, C++ client internals, or group-message blockchain support in this phase.
+Do not implement authentication, end-to-end encryption, backend login, C++ client internals, or group-message blockchain proof in this phase.
 
 ---
 
 ## Main Design Decision
 
-Use **encrypted message envelope hashing**.
+Use **conversation segment Merkle root verification**.
 
-The blockchain proof verifies the encrypted message record, not the plaintext message.
+Instead of writing one blockchain transaction for every message, the system groups direct message envelopes into small conversation segments.
 
-This means the blockchain component proves:
+Each encrypted message envelope is canonicalised and hashed off-chain.  
+The message envelope hashes are combined into a Merkle root.  
+Only the Merkle root is recorded on Sepolia.
 
-> The encrypted message envelope stored by the system has not changed since its digest was recorded on Sepolia.
+This reduces blockchain transactions while still allowing a message to be verified as part of a notarised conversation segment.
 
-The verification page should not ask the normal user to paste plaintext or ciphertext manually.  
-The normal flow is automatic.
+---
+
+## Segment Rule
+
+For the first implementation, use this segment rule:
+
+```text
+Close and record a segment when either condition is true:
+1. The segment contains 5 direct messages, OR
+2. 10 minutes have passed since the first message in the open segment.
+```
+
+Use whichever happens first.
+
+Example:
+
+```text
+Segment 1: messages 1–5       → one Merkle root → one blockchain transaction
+Segment 2: messages 6–10      → one Merkle root → one blockchain transaction
+Segment 3: messages 11–15     → one Merkle root → one blockchain transaction
+```
+
+If only two messages are sent and 10 minutes pass, close that segment and record its Merkle root.
+
+---
+
+## What the Blockchain Proof Verifies
+
+The blockchain proof verifies:
+
+```text
+This encrypted message envelope belongs to a conversation segment whose Merkle root was recorded on Sepolia.
+```
+
+It does not verify plaintext message meaning.
+
+It proves that the encrypted envelope and its segment proof match the on-chain segment root.
 
 ---
 
@@ -43,14 +78,16 @@ The user should see a simple button in the app:
 When the user clicks this button:
 
 ```text
-1. The verification page receives messageId and recordId.
+1. The verification page receives messageId, segmentId, recordId, and contract address.
 2. The verification page asks the backend for the encrypted message envelope.
-3. The verification page asks the backend for the blockchain proof.
-4. The verification page canonicalises the envelope.
-5. The verification page computes keccak256 of the canonical envelope.
-6. The verification page fetches the on-chain digest from the Sepolia contract.
-7. The verification page compares both digests.
-8. The page displays PASS or FAIL.
+3. The verification page asks the backend for the segment blockchain proof.
+4. The verification page asks the backend for the Merkle proof for that message.
+5. The verification page canonicalises the envelope.
+6. The verification page computes the message leaf hash.
+7. The verification page rebuilds the Merkle root using the Merkle proof.
+8. The verification page fetches the on-chain segment root from Sepolia.
+9. The verification page compares the rebuilt root with the on-chain root.
+10. The page displays PASS or FAIL.
 ```
 
 The user should not manually create or paste the envelope in the normal workflow.
@@ -61,20 +98,29 @@ The user should not manually create or paste the envelope in the normal workflow
 
 A manual/debug mode can be added later if useful.
 
-Manual mode would allow a developer or demonstrator to paste the encrypted envelope JSON and record ID manually.
+Manual mode would allow a developer or demonstrator to paste:
+
+```text
+encrypted envelope JSON
+segment proof JSON
+Merkle proof JSON
+record ID
+contract address
+```
 
 This is not the main user flow.
 
 ---
 
-## Encrypted Message Envelope Format
+## Direct Message Envelope Format
 
-For direct one-to-one messages, use this structure:
+For direct one-to-one messages, use this encrypted envelope structure:
 
 ```json
 {
   "schema_version": "securemsg-envelope-v1",
   "message_type": "direct",
+  "conversation_id": "direct-1-2",
   "message_id": "1",
   "sender_id": "1",
   "recipient_id": "2",
@@ -90,11 +136,33 @@ Do not implement group-message blockchain proof in this phase.
 
 ---
 
-## Canonicalisation Rule
+## Conversation ID Rule
 
-The same encrypted envelope must always produce the same digest.
+The backend should provide a stable `conversation_id` for each direct conversation.
 
-Before hashing:
+Recommended simple format for implementation:
+
+```text
+direct-{lower_user_id}-{higher_user_id}
+```
+
+Example:
+
+```text
+Alice user_id = 1
+Bob user_id = 2
+conversation_id = direct-1-2
+```
+
+If Person 2 already has another conversation ID format, use that, but it must be stable for the same pair of users.
+
+---
+
+## Envelope Canonicalisation Rule
+
+The same encrypted envelope must always produce the same leaf hash.
+
+Before hashing an envelope:
 
 1. Use only the required fields listed in the envelope format.
 2. Use exact field names.
@@ -107,13 +175,86 @@ Before hashing:
 Example canonical JSON:
 
 ```json
-{"ciphertext":"abc","message_id":"1","message_type":"direct","ratchet_header_enc":"xyz","recipient_id":"2","schema_version":"securemsg-envelope-v1","sender_id":"1","sent_at":1716200000}
+{"ciphertext":"abc","conversation_id":"direct-1-2","message_id":"1","message_type":"direct","ratchet_header_enc":"xyz","recipient_id":"2","schema_version":"securemsg-envelope-v1","sender_id":"1","sent_at":1716200000}
 ```
 
-Digest rule:
+Message leaf hash rule:
 
 ```text
-blockchain_digest = keccak256(utf8Bytes(canonical_json))
+leaf_hash = keccak256(utf8Bytes(canonical_json_of_encrypted_message_envelope))
+```
+
+---
+
+## Segment Construction Rule
+
+A segment contains up to 5 direct message envelopes from the same conversation.
+
+A segment also closes after 10 minutes from its first message if fewer than 5 messages have arrived.
+
+Segment message ordering:
+
+```text
+Sort messages by sent_at ascending.
+If two messages have the same sent_at, sort by message_id ascending.
+```
+
+For each message in the segment:
+
+```text
+envelope → canonical JSON → leaf_hash
+```
+
+Then build a Merkle tree from the ordered `leaf_hash` values.
+
+---
+
+## Merkle Tree Rule
+
+Use `keccak256` for parent nodes.
+
+If a tree level has an odd number of nodes, duplicate the last node.
+
+Parent hash rule:
+
+```text
+parent = keccak256(left_hash || right_hash)
+```
+
+Do not sort the pair before hashing.  
+Preserve left/right order because message order matters.
+
+The final top hash is the segment Merkle root:
+
+```text
+segment_root = merkle_root(ordered_leaf_hashes)
+```
+
+---
+
+## What Is Stored On-Chain
+
+The smart contract stores one record per conversation segment:
+
+```text
+segment_root
+conversation_ref
+segment_ref
+message_count
+timestamp
+recorder wallet address
+```
+
+The smart contract does not store:
+
+```text
+plaintext messages
+ciphertext bodies
+full message envelopes
+Merkle proofs
+passwords
+private keys
+user secrets
 ```
 
 ---
@@ -127,7 +268,9 @@ blockchain/
 ├── contracts/
 │   └── MessageIntegrity.sol
 ├── scripts/
-│   └── recordDigest.js
+│   └── recordSegmentRoot.js
+├── utils/
+│   └── merkle.js
 ├── abi/
 │   └── MessageIntegrity.json
 ├── remix/
@@ -166,22 +309,32 @@ MessageIntegrity.sol
 
 The contract must:
 
-1. Store a `bytes32` digest.
-2. Store a message reference, such as backend `message_id`.
-3. Store the block timestamp.
-4. Store the wallet address that recorded the digest.
-5. Emit an event when a digest is recorded.
-6. Allow records to be retrieved by record ID.
-7. Reject an empty digest.
+1. Store a `bytes32` segment Merkle root.
+2. Store a conversation reference, such as `direct-1-2` or an opaque backend conversation ID.
+3. Store a segment reference, such as `direct-1-2-seg-1`.
+4. Store the number of messages in the segment.
+5. Store the block timestamp.
+6. Store the wallet address that recorded the segment root.
+7. Emit an event when a segment root is recorded.
+8. Allow segment records to be retrieved by record ID.
+9. Reject an empty root.
+10. Reject a zero message count.
 
 Recommended interface:
 
 ```solidity
-function recordDigest(bytes32 digest, string calldata messageRef) external returns (uint256);
+function recordSegmentRoot(
+    bytes32 segmentRoot,
+    string calldata conversationRef,
+    string calldata segmentRef,
+    uint256 messageCount
+) external returns (uint256);
 
 function getRecord(uint256 recordId) external view returns (
-    bytes32 digest,
-    string memory messageRef,
+    bytes32 segmentRoot,
+    string memory conversationRef,
+    string memory segmentRef,
+    uint256 messageCount,
     uint256 timestamp,
     address recorder
 );
@@ -192,18 +345,16 @@ function getRecordCount() external view returns (uint256);
 Recommended event:
 
 ```solidity
-event DigestRecorded(
+event SegmentRootRecorded(
     uint256 indexed recordId,
-    bytes32 indexed digest,
-    string messageRef,
+    bytes32 indexed segmentRoot,
+    string conversationRef,
+    string segmentRef,
+    uint256 messageCount,
     uint256 timestamp,
     address indexed recorder
 );
 ```
-
-Do not store plaintext messages on-chain.  
-Do not store ciphertext bodies on-chain.  
-Only store the digest and minimal proof metadata.
 
 ---
 
@@ -212,9 +363,11 @@ Only store the digest and minimal proof metadata.
 Use:
 
 ```solidity
-struct Record {
-    bytes32 digest;
-    string messageRef;
+struct SegmentRecord {
+    bytes32 segmentRoot;
+    string conversationRef;
+    string segmentRef;
+    uint256 messageCount;
     uint256 timestamp;
     address recorder;
 }
@@ -223,7 +376,7 @@ struct Record {
 Use:
 
 ```solidity
-mapping(uint256 => Record) private records;
+mapping(uint256 => SegmentRecord) private records;
 uint256 private recordCount;
 ```
 
@@ -234,14 +387,17 @@ uint256 private recordCount;
 Use Remix to compile and manually check:
 
 1. Contract deployment.
-2. Recording a valid digest.
-3. Rejecting `bytes32(0)`.
-4. Returning the correct digest.
-5. Returning the correct message reference.
-6. Returning a non-zero timestamp.
-7. Returning the recorder address.
-8. Emitting `DigestRecorded`.
-9. Incrementing record count after each record.
+2. Recording a valid segment root.
+3. Rejecting `bytes32(0)` as the segment root.
+4. Rejecting `messageCount = 0`.
+5. Returning the correct segment root.
+6. Returning the correct conversation reference.
+7. Returning the correct segment reference.
+8. Returning the correct message count.
+9. Returning a non-zero timestamp.
+10. Returning the recorder address.
+11. Emitting `SegmentRootRecorded`.
+12. Incrementing record count after each segment record.
 
 Record the check results in:
 
@@ -293,44 +449,114 @@ Do not commit the real `.env` file.
 
 ---
 
-## Digest Recording Script
+## Segment Recording Script
 
 Create:
 
 ```text
-blockchain/scripts/recordDigest.js
+blockchain/scripts/recordSegmentRoot.js
 ```
 
 The script should:
 
-1. Accept an encrypted message envelope as input.
-2. Canonicalise the envelope.
-3. Compute `keccak256` of the canonical JSON string.
-4. Call `recordDigest(bytes32 digest, string messageRef)` on the deployed contract.
-5. Wait for transaction confirmation.
-6. Extract `recordId` from the emitted event.
-7. Return a blockchain proof object.
+1. Accept a segment object as input.
+2. Read the encrypted message envelopes in that segment.
+3. Canonicalise each envelope.
+4. Compute a `keccak256` leaf hash for each envelope.
+5. Build a Merkle root from the ordered leaf hashes.
+6. Call `recordSegmentRoot(bytes32 segmentRoot, string conversationRef, string segmentRef, uint256 messageCount)` on the deployed contract.
+7. Wait for transaction confirmation.
+8. Extract `recordId` from the emitted event.
+9. Return a blockchain segment proof object.
 
-Proof object format:
+Input segment object format:
 
 ```json
 {
-  "digest": "0x...",
+  "conversation_id": "direct-1-2",
+  "segment_id": "direct-1-2-seg-1",
+  "messages": [
+    {
+      "schema_version": "securemsg-envelope-v1",
+      "message_type": "direct",
+      "conversation_id": "direct-1-2",
+      "message_id": "1",
+      "sender_id": "1",
+      "recipient_id": "2",
+      "ciphertext": "<base64>",
+      "ratchet_header_enc": "<base64>",
+      "sent_at": 1716200000
+    }
+  ]
+}
+```
+
+Returned segment proof object format:
+
+```json
+{
+  "segment_root": "0x...",
   "record_id": 1,
   "transaction_hash": "0x...",
   "contract_address": "0x...",
   "chain_name": "sepolia",
   "chain_id": 11155111,
-  "message_ref": "1",
+  "conversation_ref": "direct-1-2",
+  "segment_ref": "direct-1-2-seg-1",
+  "message_count": 5,
   "recorded_at": 1716200000
 }
 ```
 
 ---
 
+## Merkle Proof Format
+
+For verifying a single message inside a segment, the backend should provide a Merkle proof.
+
+Recommended Merkle proof object:
+
+```json
+{
+  "leaf_hash": "0x...",
+  "leaf_index": 0,
+  "siblings": [
+    {
+      "position": "right",
+      "hash": "0x..."
+    },
+    {
+      "position": "left",
+      "hash": "0x..."
+    }
+  ]
+}
+```
+
+Position meaning:
+
+```text
+right = sibling was on the right side of the current hash
+left  = sibling was on the left side of the current hash
+```
+
+Verification rule:
+
+```text
+Start with leaf_hash.
+For each sibling:
+  if position == right:
+      current = keccak256(current || sibling_hash)
+  if position == left:
+      current = keccak256(sibling_hash || current)
+Final current value must equal the segment root.
+```
+
+---
+
 ## Backend Integration Required From Person 2
 
-Person 2 must provide the backend data and endpoints needed for automatic verification.
+Person 2 must provide the backend data and endpoints needed for automatic segment verification.
 
 ### 1. Message response fields
 
@@ -339,6 +565,7 @@ When a direct message is created, the backend should return:
 ```json
 {
   "id": 1,
+  "conversation_id": "direct-1-2",
   "sender_id": 1,
   "recipient_id": 2,
   "ciphertext": "<base64>",
@@ -349,13 +576,37 @@ When a direct message is created, the backend should return:
 
 These fields are needed to build the encrypted message envelope.
 
-### 2. Blockchain proof storage fields
+### 2. Segment tracking fields
 
-Person 2 should add these fields to the message table or a related proof table:
+Person 2 should add segment tracking fields to messages:
 
 ```text
-message_id
-blockchain_digest
+conversation_id
+segment_id
+segment_index
+envelope_hash
+segment_status
+```
+
+Recommended `segment_status` values:
+
+```text
+open
+closed
+recorded
+```
+
+### 3. Segment proof storage fields
+
+Person 2 should add a segment proof table or equivalent fields:
+
+```text
+segment_id
+conversation_id
+segment_start_message_id
+segment_end_message_id
+message_count
+segment_root
 blockchain_record_id
 blockchain_tx_hash
 blockchain_contract_address
@@ -364,22 +615,66 @@ blockchain_chain_id
 blockchain_recorded_at
 ```
 
-### 3. Store blockchain proof endpoint
+### 4. Open segment rule
+
+For each direct conversation, the backend should maintain one open segment.
+
+A segment closes when:
 
 ```text
-POST /api/v1/messages/{message_id}/blockchain-record
+message_count == 5
+OR
+current_time - first_message_sent_at >= 10 minutes
+```
+
+When a segment closes, it is ready to be recorded on-chain.
+
+### 5. Fetch closed segment endpoint
+
+```text
+GET /api/v1/conversations/{conversation_id}/segments/{segment_id}
+```
+
+Expected response:
+
+```json
+{
+  "conversation_id": "direct-1-2",
+  "segment_id": "direct-1-2-seg-1",
+  "status": "closed",
+  "messages": [
+    {
+      "schema_version": "securemsg-envelope-v1",
+      "message_type": "direct",
+      "conversation_id": "direct-1-2",
+      "message_id": "1",
+      "sender_id": "1",
+      "recipient_id": "2",
+      "ciphertext": "<base64>",
+      "ratchet_header_enc": "<base64>",
+      "sent_at": 1716200000
+    }
+  ]
+}
+```
+
+### 6. Store blockchain segment proof endpoint
+
+```text
+POST /api/v1/conversations/{conversation_id}/segments/{segment_id}/blockchain-record
 ```
 
 Request body:
 
 ```json
 {
-  "digest": "0x...",
+  "segment_root": "0x...",
   "record_id": 1,
   "transaction_hash": "0x...",
   "contract_address": "0x...",
   "chain_name": "sepolia",
   "chain_id": 11155111,
+  "message_count": 5,
   "recorded_at": 1716200000
 }
 ```
@@ -388,33 +683,13 @@ Expected response:
 
 ```json
 {
-  "message_id": 1,
+  "conversation_id": "direct-1-2",
+  "segment_id": "direct-1-2-seg-1",
   "status": "recorded"
 }
 ```
 
-### 4. Fetch blockchain proof endpoint
-
-```text
-GET /api/v1/messages/{message_id}/blockchain-record
-```
-
-Expected response:
-
-```json
-{
-  "message_id": 1,
-  "digest": "0x...",
-  "record_id": 1,
-  "transaction_hash": "0x...",
-  "contract_address": "0x...",
-  "chain_name": "sepolia",
-  "chain_id": 11155111,
-  "recorded_at": 1716200000
-}
-```
-
-### 5. Fetch encrypted envelope endpoint
+### 7. Fetch message envelope endpoint
 
 ```text
 GET /api/v1/messages/{message_id}/envelope
@@ -426,6 +701,7 @@ Expected response:
 {
   "schema_version": "securemsg-envelope-v1",
   "message_type": "direct",
+  "conversation_id": "direct-1-2",
   "message_id": "1",
   "sender_id": "1",
   "recipient_id": "2",
@@ -438,6 +714,43 @@ Expected response:
 This endpoint must enforce access control.  
 Only the sender or recipient of the message should be able to fetch the envelope.
 
+### 8. Fetch message segment proof endpoint
+
+```text
+GET /api/v1/messages/{message_id}/segment-proof
+```
+
+Expected response:
+
+```json
+{
+  "message_id": "1",
+  "conversation_id": "direct-1-2",
+  "segment_id": "direct-1-2-seg-1",
+  "segment_root": "0x...",
+  "blockchain_record_id": 1,
+  "blockchain_tx_hash": "0x...",
+  "contract_address": "0x...",
+  "chain_name": "sepolia",
+  "chain_id": 11155111,
+  "message_count": 5,
+  "recorded_at": 1716200000,
+  "merkle_proof": {
+    "leaf_hash": "0x...",
+    "leaf_index": 0,
+    "siblings": [
+      {
+        "position": "right",
+        "hash": "0x..."
+      }
+    ]
+  }
+}
+```
+
+This endpoint must enforce access control.  
+Only the sender or recipient of the message should be able to fetch the segment proof.
+
 ---
 
 ## What Person 2 Needs From Person 3
@@ -449,30 +762,43 @@ Provide Person 2 with:
 3. Sepolia chain ID.
 4. Exact envelope format.
 5. Exact canonicalisation rule.
-6. Exact digest computation rule.
-7. Proof object format.
-8. Backend request body for storing blockchain proof.
-9. Example valid proof object.
+6. Exact leaf hash rule.
+7. Exact Merkle tree rule.
+8. Exact Merkle proof format.
+9. Segment proof object format.
+10. Backend request body for storing blockchain segment proof.
+11. Example valid segment proof object.
 
-Digest rule to share:
+Rules to share:
 
 ```text
-blockchain_digest = keccak256(utf8Bytes(canonical_json_of_encrypted_message_envelope))
+leaf_hash = keccak256(utf8Bytes(canonical_json_of_encrypted_message_envelope))
+segment_root = merkle_root(ordered_leaf_hashes)
 ```
 
 ---
 
 ## Frontend / C++ Client Integration Required From Person 1
 
-Person 1 should add blockchain proof support to the message UI/client.
+Person 1 should add blockchain segment proof support to the message UI/client.
 
 ### After sending a message
 
-The app should show:
+The app does not need to show a blockchain transaction immediately for every message.
+
+Instead, it should show one of these states:
 
 ```text
 Message sent successfully.
-Message ID: 1
+Blockchain status: Pending segment recording.
+```
+
+or, after the segment is recorded:
+
+```text
+Message sent successfully.
+Blockchain segment recorded.
+Segment ID: direct-1-2-seg-1
 Blockchain Record ID: 1
 Transaction Hash: 0x...
 [Verify Message]
@@ -494,10 +820,11 @@ recordId
 contract
 ```
 
-Optional query parameter:
+Optional query parameters:
 
 ```text
 backendBaseUrl
+segmentId
 ```
 
 Example:
@@ -506,15 +833,13 @@ Example:
 verification-page/index.html?messageId=1&recordId=1&contract=0x123...&backendBaseUrl=https://team.theburkenator.com/api/v1
 ```
 
-### Optional export button
+### Optional display text
 
-Person 1 may add an optional debug button:
+Person 1 can show:
 
 ```text
-[Export Proof JSON]
+This message is verified as part of conversation segment direct-1-2-seg-1.
 ```
-
-This is not the main verification flow.
 
 ---
 
@@ -527,13 +852,14 @@ Provide Person 1 with:
 3. Contract address.
 4. Example record ID.
 5. Example message ID.
-6. Example verification URL.
-7. Short explanation of what the Verify button does.
+6. Example segment ID.
+7. Example verification URL.
+8. Short explanation of what the Verify button does.
 
 Example explanation:
 
 ```text
-The Verify Message button opens the verification page with the message ID and blockchain record ID. The page then fetches the encrypted envelope and blockchain proof automatically and shows PASS or FAIL.
+The Verify Message button opens the verification page with the message ID and blockchain record ID. The page fetches the encrypted envelope and segment proof automatically, rebuilds the Merkle root, checks it against Sepolia, and shows PASS or FAIL.
 ```
 
 ---
@@ -561,15 +887,18 @@ If `backendBaseUrl` is not provided, use a configured default.
 1. Read messageId, recordId, and contract address from URL.
 2. Fetch encrypted envelope from:
    GET /api/v1/messages/{messageId}/envelope
-3. Fetch blockchain proof from:
-   GET /api/v1/messages/{messageId}/blockchain-record
+3. Fetch segment proof from:
+   GET /api/v1/messages/{messageId}/segment-proof
 4. Canonicalise the envelope.
-5. Compute local keccak256 digest.
-6. Connect to Sepolia using ethers.js.
-7. Call getRecord(recordId) on the smart contract.
-8. Compare local digest with on-chain digest.
-9. Compare backend-stored digest with on-chain digest.
-10. Display PASS or FAIL.
+5. Compute local leaf hash.
+6. Compare local leaf hash with backend-provided leaf_hash.
+7. Rebuild Merkle root using the Merkle proof.
+8. Connect to Sepolia using ethers.js.
+9. Call getRecord(recordId) on the smart contract.
+10. Compare rebuilt Merkle root with on-chain segment root.
+11. Compare backend-stored segment root with on-chain segment root.
+12. Compare contract segmentRef/conversationRef with backend segment data.
+13. Display PASS or FAIL.
 ```
 
 ### Display fields
@@ -578,14 +907,18 @@ Show:
 
 ```text
 Message ID
+Conversation ID
+Segment ID
 Record ID
 Transaction hash
 Contract address
 Chain name
 Canonical JSON
-Locally computed digest
-Backend stored digest
-On-chain digest
+Locally computed leaf hash
+Backend provided leaf hash
+Rebuilt Merkle root
+Backend stored segment root
+On-chain segment root
 Blockchain timestamp
 Recorder wallet address
 Verification result
@@ -595,14 +928,19 @@ Verification result
 
 ```text
 PASS:
-- local digest matches on-chain digest
-- backend stored digest matches on-chain digest
-- messageRef from contract matches messageId
+- local leaf hash matches backend-provided leaf_hash
+- Merkle proof rebuilds the same segment root
+- rebuilt segment root matches on-chain segment root
+- backend stored segment root matches on-chain segment root
+- segmentRef from contract matches backend segment_id
+- conversationRef from contract matches backend conversation_id
 
 FAIL:
-- local digest does not match on-chain digest
-- backend stored digest does not match on-chain digest
-- messageRef does not match messageId
+- local leaf hash does not match backend-provided leaf_hash
+- Merkle proof does not rebuild the expected segment root
+- rebuilt segment root does not match on-chain segment root
+- backend stored segment root does not match on-chain segment root
+- segmentRef or conversationRef does not match
 - recordId does not exist
 - backend proof is missing
 - contract call fails
@@ -639,15 +977,15 @@ GET /api/v1/messages/{messageId}/envelope
 
 Returns the encrypted envelope.
 
-### `fetchBackendProof(messageId, backendBaseUrl)`
+### `fetchSegmentProof(messageId, backendBaseUrl)`
 
 Calls:
 
 ```text
-GET /api/v1/messages/{messageId}/blockchain-record
+GET /api/v1/messages/{messageId}/segment-proof
 ```
 
-Returns the backend-stored blockchain proof.
+Returns the backend-stored segment proof and Merkle proof.
 
 ### `canonicaliseEnvelope(envelope)`
 
@@ -657,11 +995,18 @@ Returns the backend-stored blockchain proof.
 - Keeps `sent_at` as number.
 - Returns compact JSON string.
 
-### `computeEnvelopeDigest(envelope)`
+### `computeLeafHash(envelope)`
 
 - Calls `canonicaliseEnvelope(envelope)`.
 - Computes `keccak256(utf8Bytes(canonicalJson))`.
-- Returns digest.
+- Returns leaf hash.
+
+### `rebuildMerkleRoot(leafHash, merkleProof)`
+
+- Starts with `leafHash`.
+- Applies each sibling in order.
+- Uses left/right sibling position.
+- Returns the rebuilt Merkle root.
 
 ### `getContract(contractAddress)`
 
@@ -672,14 +1017,15 @@ Returns the backend-stored blockchain proof.
 ### `fetchOnChainRecord(contractAddress, recordId)`
 
 - Calls `getRecord(recordId)`.
-- Returns digest, messageRef, timestamp, and recorder address.
+- Returns segmentRoot, conversationRef, segmentRef, messageCount, timestamp, and recorder address.
 
 ### `verifyMessageAutomatically()`
 
 - Reads URL parameters.
 - Fetches envelope.
-- Fetches backend proof.
-- Computes local digest.
+- Fetches segment proof.
+- Computes local leaf hash.
+- Rebuilds Merkle root.
 - Fetches on-chain record.
 - Compares values.
 - Displays PASS or FAIL.
@@ -690,25 +1036,28 @@ Displays all verification details clearly.
 
 ---
 
-## End-to-End Automatic Blockchain Flow
+## End-to-End Automatic Segment Blockchain Flow
 
 ```text
-1. Person 1 sends encrypted message through backend.
-2. Person 2 backend stores ciphertext and returns message data.
-3. Blockchain script builds canonical encrypted envelope.
-4. Blockchain script computes keccak256 digest.
-5. Blockchain script records digest on Sepolia.
-6. Contract emits DigestRecorded event.
-7. Blockchain script extracts record ID and transaction hash.
-8. Blockchain proof is sent to Person 2 backend.
-9. Backend stores blockchain proof against the message ID.
-10. Person 1 displays transaction hash, record ID, and Verify Message button.
-11. User clicks Verify Message.
-12. Verification page fetches encrypted envelope from backend.
-13. Verification page fetches backend blockchain proof.
-14. Verification page fetches on-chain digest from Sepolia.
-15. Verification page recomputes digest locally.
-16. Verification page displays PASS or FAIL.
+1. Person 1 sends encrypted direct messages through backend.
+2. Person 2 backend stores ciphertext and assigns each message to the current open conversation segment.
+3. Segment closes after 5 messages or 10 minutes, whichever comes first.
+4. Person 3 blockchain script fetches the closed segment from backend.
+5. Blockchain script canonicalises each encrypted envelope.
+6. Blockchain script computes one leaf hash per envelope.
+7. Blockchain script builds the segment Merkle root.
+8. Blockchain script records the segment root on Sepolia.
+9. Contract emits SegmentRootRecorded event.
+10. Blockchain script extracts record ID and transaction hash.
+11. Blockchain proof is sent to Person 2 backend.
+12. Backend stores blockchain proof against the segment.
+13. Person 1 displays segment ID, transaction hash, record ID, and Verify Message button.
+14. User clicks Verify Message.
+15. Verification page fetches encrypted envelope from backend.
+16. Verification page fetches segment proof and Merkle proof from backend.
+17. Verification page fetches on-chain segment root from Sepolia.
+18. Verification page recomputes leaf hash and rebuilds the Merkle root.
+19. Verification page displays PASS or FAIL.
 ```
 
 ---
@@ -719,7 +1068,8 @@ Blockchain files:
 
 ```text
 blockchain/contracts/MessageIntegrity.sol
-blockchain/scripts/recordDigest.js
+blockchain/scripts/recordSegmentRoot.js
+blockchain/utils/merkle.js
 blockchain/abi/MessageIntegrity.json
 blockchain/remix/deployment-notes.md
 blockchain/package.json
@@ -752,21 +1102,29 @@ Include:
 
 1. Purpose of blockchain component.
 2. Why encrypted message envelopes are hashed.
-3. Why users do not manually paste envelopes in the normal flow.
-4. Canonical envelope format.
-5. Digest computation rule.
-6. Smart contract address.
-7. ABI location.
-8. Sepolia deployment transaction hash.
-9. Automatic verification flow.
-10. What is stored on-chain.
-11. What is not stored on-chain.
-12. Limitations.
+3. Why conversation segments are used instead of one transaction per message.
+4. Segment rule: 5 messages or 10 minutes, whichever comes first.
+5. Canonical envelope format.
+6. Leaf hash rule.
+7. Merkle root construction rule.
+8. Smart contract address.
+9. ABI location.
+10. Sepolia deployment transaction hash.
+11. Automatic verification flow.
+12. What is stored on-chain.
+13. What is not stored on-chain.
+14. Limitations.
 
 Important limitation:
 
 ```text
-The blockchain proves that a specific encrypted envelope digest was recorded at a certain time. It does not reveal or verify plaintext message meaning, and it does not stop the server from refusing to deliver messages.
+The blockchain proves that a conversation segment root was recorded at a certain time. It does not reveal or verify plaintext message meaning, and it does not stop the server from refusing to deliver messages.
+```
+
+Trade-off to explain:
+
+```text
+Recording one Merkle root per segment reduces gas cost compared with recording one transaction per message. The trade-off is that verification requires segment metadata and a Merkle proof, but this is handled automatically by the verification page.
 ```
 
 ---
@@ -774,49 +1132,69 @@ The blockchain proves that a specific encrypted envelope digest was recorded at 
 ## Implementation Order
 
 1. Create the blockchain folder structure.
-2. Implement `MessageIntegrity.sol`.
+2. Implement `MessageIntegrity.sol` for segment roots.
 3. Compile the contract in Remix.
 4. Use Remix to run the contract checks listed above.
 5. Deploy to Sepolia using Remix and MetaMask.
 6. Save contract address, ABI, and deployment transaction hash.
 7. Implement envelope canonicalisation.
-8. Implement digest computation.
-9. Implement `recordDigest.js`.
-10. Test recording one sample envelope on Sepolia.
-11. Ask Person 2 for backend envelope/proof endpoints.
-12. Ask Person 1 for Verify Message button support.
-13. Build automatic verification page.
-14. Test automatic PASS with unchanged envelope.
-15. Test automatic FAIL after changing ciphertext or timestamp.
-16. Store blockchain proof in backend.
-17. Display record ID, transaction hash, and Verify Message link in frontend/client.
+8. Implement leaf hash computation.
+9. Implement Merkle root and Merkle proof utilities.
+10. Implement `recordSegmentRoot.js`.
+11. Test recording one sample segment on Sepolia.
+12. Ask Person 2 for segment/envelope/proof endpoints.
+13. Ask Person 1 for Verify Message button support.
+14. Build automatic verification page.
+15. Test automatic PASS with unchanged envelope and valid Merkle proof.
+16. Test automatic FAIL after changing ciphertext, timestamp, Merkle proof, or record ID.
+17. Store segment blockchain proof in backend.
+18. Display segment ID, record ID, transaction hash, and Verify Message link in frontend/client.
 
 ---
 
-## Sample Test Envelope
+## Sample Test Segment
 
 Use this before backend integration:
 
 ```json
 {
-  "schema_version": "securemsg-envelope-v1",
-  "message_type": "direct",
-  "message_id": "1",
-  "sender_id": "1",
-  "recipient_id": "2",
-  "ciphertext": "VGhpcyBpcyBhIHRlc3QgY2lwaGVydGV4dA==",
-  "ratchet_header_enc": "VGhpcyBpcyBhIHRlc3QgcmF0Y2hldCBoZWFkZXI=",
-  "sent_at": 1716200000
+  "conversation_id": "direct-1-2",
+  "segment_id": "direct-1-2-seg-1",
+  "messages": [
+    {
+      "schema_version": "securemsg-envelope-v1",
+      "message_type": "direct",
+      "conversation_id": "direct-1-2",
+      "message_id": "1",
+      "sender_id": "1",
+      "recipient_id": "2",
+      "ciphertext": "VGhpcyBpcyBhIHRlc3QgY2lwaGVydGV4dA==",
+      "ratchet_header_enc": "VGhpcyBpcyBhIHRlc3QgcmF0Y2hldCBoZWFkZXI=",
+      "sent_at": 1716200000
+    },
+    {
+      "schema_version": "securemsg-envelope-v1",
+      "message_type": "direct",
+      "conversation_id": "direct-1-2",
+      "message_id": "2",
+      "sender_id": "2",
+      "recipient_id": "1",
+      "ciphertext": "U2Vjb25kIHRlc3QgY2lwaGVydGV4dA==",
+      "ratchet_header_enc": "U2Vjb25kIHRlc3QgcmF0Y2hldCBoZWFkZXI=",
+      "sent_at": 1716200060
+    }
+  ]
 }
 ```
 
 Expected behaviour:
 
 ```text
-Original envelope → verification PASS
+Original message envelope + valid Merkle proof → verification PASS
 Change ciphertext → verification FAIL
 Change recipient_id → verification FAIL
 Change sent_at → verification FAIL
+Use wrong Merkle proof → verification FAIL
 Use wrong record ID → verification FAIL
 ```
 
@@ -840,6 +1218,7 @@ smart contract access-control roles
 message storage on-chain
 plaintext message hashing
 private key storage
-backend database design beyond blockchain proof fields
 manual envelope paste as the main user flow
+one blockchain transaction per message
+full conversation hashing
 ```
