@@ -45,28 +45,43 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Detect frontend project
+        id: frontend-project
+        run: |
+          if test -f package.json; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Setup Node.js
+        if: steps.frontend-project.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
-          cache: 'npm'
 
       - name: Install dependencies
+        if: steps.frontend-project.outputs.exists == 'true'
         run: npm ci
 
       - name: Type check
+        if: steps.frontend-project.outputs.exists == 'true'
         run: npm run --if-present typecheck
 
       - name: Build application
+        if: steps.frontend-project.outputs.exists == 'true'
         run: npm run build
 
       - name: Verify build output
+        if: steps.frontend-project.outputs.exists == 'true'
         run: test -d dist && test -f dist/index.html
 
       - name: Build Storybook
+        if: steps.frontend-project.outputs.exists == 'true'
         run: npm run --if-present build-storybook
 
       - name: Upload application build
+        if: steps.frontend-project.outputs.exists == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: frontend-dist
@@ -76,7 +91,7 @@ jobs:
 
       - name: Upload Storybook build
         uses: actions/upload-artifact@v4
-        if: hashFiles('storybook-static/**') != ''
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('storybook-static/**') != ''
         with:
           name: storybook-static
           path: storybook-static/

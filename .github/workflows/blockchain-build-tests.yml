@@ -1,4 +1,4 @@
-name: Blockchain Remix Build Checks
+name: Smart Contract Remix Build Checks
 
 on:
   workflow_dispatch:
@@ -6,13 +6,19 @@ on:
     branches:
       - main
     paths:
-      - 'blockchain/**'
+      - 'contracts/**'
+      - 'abi/**'
+      - 'remix/**'
+      - 'scripts/**'
       - '.github/workflows/blockchain-build-tests.yml'
   pull_request:
     branches:
       - main
     paths:
-      - 'blockchain/**'
+      - 'contracts/**'
+      - 'abi/**'
+      - 'remix/**'
+      - 'scripts/**'
       - '.github/workflows/blockchain-build-tests.yml'
 
 permissions:
@@ -25,95 +31,89 @@ concurrency:
 jobs:
   blockchain:
     runs-on: ubuntu-latest
-    name: Validate Remix Blockchain Files
+    name: Validate Remix Smart Contract Files
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Detect blockchain project
-        id: blockchain-project
+      - name: Detect smart contract project
+        id: contract-project
         run: |
-          if test -d blockchain; then
+          if test -d contracts; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Verify required blockchain files
-        if: steps.blockchain-project.outputs.exists == 'true'
+      - name: Verify required contract files
+        if: steps.contract-project.outputs.exists == 'true'
         run: |
-          test -f blockchain/contracts/MessageIntegrity.sol
-          test -f blockchain/scripts/recordDigest.js
-          test -f blockchain/abi/MessageIntegrity.json
-          test -f blockchain/remix/deployment-notes.md
-          test -f blockchain/package.json
-          test -f blockchain/.env.example
-          test -f blockchain/README.md
+          test -f contracts/MessageIntegrity.sol
 
       - name: Ensure real environment files are not committed
-        if: steps.blockchain-project.outputs.exists == 'true'
+        if: steps.contract-project.outputs.exists == 'true'
         run: |
-          test ! -f blockchain/.env
-          test ! -f blockchain/.env.local
+          test ! -f .env
+          test ! -f .env.local
 
-      - name: Validate contract interface
-        if: steps.blockchain-project.outputs.exists == 'true'
+      - name: Validate segment-root contract interface
+        if: steps.contract-project.outputs.exists == 'true'
         run: |
-          grep -Eq 'function[[:space:]]+recordDigest[[:space:]]*\([[:space:]]*bytes32[[:space:]]+digest,[[:space:]]*string[[:space:]]+calldata[[:space:]]+messageRef[[:space:]]*\)' blockchain/contracts/MessageIntegrity.sol
-          grep -Eq 'function[[:space:]]+getRecord[[:space:]]*\([[:space:]]*uint256[[:space:]]+recordId[[:space:]]*\)' blockchain/contracts/MessageIntegrity.sol
-          grep -Eq 'function[[:space:]]+getRecordCount[[:space:]]*\(' blockchain/contracts/MessageIntegrity.sol
-          grep -Eq 'event[[:space:]]+DigestRecorded[[:space:]]*\(' blockchain/contracts/MessageIntegrity.sol
-          grep -Eq 'require[[:space:]]*\([[:space:]]*digest[[:space:]]*!=[[:space:]]*bytes32[[:space:]]*\([[:space:]]*0[[:space:]]*\)' blockchain/contracts/MessageIntegrity.sol
+          grep -Eq 'contract[[:space:]]+MessageIntegrity' contracts/MessageIntegrity.sol
+          grep -Eq 'struct[[:space:]]+SegmentRecord' contracts/MessageIntegrity.sol
+          grep -Eq 'function[[:space:]]+recordSegmentRoot[[:space:]]*\(' contracts/MessageIntegrity.sol
+          grep -Eq 'function[[:space:]]+getRecord[[:space:]]*\([[:space:]]*uint256[[:space:]]+recordId[[:space:]]*\)' contracts/MessageIntegrity.sol
+          grep -Eq 'function[[:space:]]+getRecordCount[[:space:]]*\(' contracts/MessageIntegrity.sol
+          grep -Eq 'event[[:space:]]+SegmentRootRecorded[[:space:]]*\(' contracts/MessageIntegrity.sol
+          grep -Eq 'require[[:space:]]*\([[:space:]]*segmentRoot[[:space:]]*!=[[:space:]]*bytes32[[:space:]]*\([[:space:]]*0[[:space:]]*\)' contracts/MessageIntegrity.sol
+          grep -Eq 'require[[:space:]]*\([[:space:]]*messageCount[[:space:]]*>[[:space:]]*0' contracts/MessageIntegrity.sol
+          grep -Eq 'require[[:space:]]*\([[:space:]]*messageCount[[:space:]]*<=[[:space:]]*5' contracts/MessageIntegrity.sol
 
       - name: Validate Remix deployment notes
-        if: steps.blockchain-project.outputs.exists == 'true'
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('remix/deployment-notes.md') != ''
         run: |
-          grep -Eq 'contract_address' blockchain/remix/deployment-notes.md
-          grep -Eq 'deployment_transaction_hash' blockchain/remix/deployment-notes.md
-          grep -Eq 'network_name[[:space:]]*=?[[:space:]]*sepolia|sepolia' blockchain/remix/deployment-notes.md
-          grep -Eq 'chain_id[[:space:]]*=?[[:space:]]*11155111|11155111' blockchain/remix/deployment-notes.md
+          grep -Eq 'contract_address' remix/deployment-notes.md
+          grep -Eq 'deployment_transaction_hash' remix/deployment-notes.md
+          grep -Eq 'network_name[[:space:]]*=?[[:space:]]*sepolia|sepolia' remix/deployment-notes.md
+          grep -Eq 'chain_id[[:space:]]*=?[[:space:]]*11155111|11155111' remix/deployment-notes.md
 
       - name: Setup Node.js
-        if: steps.blockchain-project.outputs.exists == 'true'
+        if: steps.contract-project.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
-      - name: Install blockchain dependencies from lockfile
-        if: steps.blockchain-project.outputs.exists == 'true' && hashFiles('blockchain/package-lock.json') != ''
-        working-directory: blockchain
+      - name: Install dependencies from lockfile
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('package-lock.json') != ''
         run: npm ci
 
-      - name: Install blockchain dependencies
-        if: steps.blockchain-project.outputs.exists == 'true' && hashFiles('blockchain/package-lock.json') == ''
-        working-directory: blockchain
+      - name: Install dependencies
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('package.json') != '' && hashFiles('package-lock.json') == ''
         run: npm install
 
       - name: Compile contracts with solc
-        if: steps.blockchain-project.outputs.exists == 'true'
-        working-directory: blockchain
+        if: steps.contract-project.outputs.exists == 'true'
         run: |
           mkdir -p build/solc
           npx --yes solc@0.8.24 --bin --abi contracts/*.sol -o build/solc
 
       - name: Validate ABI JSON
-        if: steps.blockchain-project.outputs.exists == 'true'
-        run: node -e "JSON.parse(require('fs').readFileSync('blockchain/abi/MessageIntegrity.json', 'utf8'))"
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('abi/MessageIntegrity.json') != ''
+        run: node -e "JSON.parse(require('fs').readFileSync('abi/MessageIntegrity.json', 'utf8'))"
 
       - name: Check recording script syntax
-        if: steps.blockchain-project.outputs.exists == 'true'
-        run: node --check blockchain/scripts/recordDigest.js
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('scripts/recordDigest.js') != ''
+        run: node --check scripts/recordDigest.js
 
-      - name: Run optional blockchain script tests
-        if: steps.blockchain-project.outputs.exists == 'true'
-        working-directory: blockchain
+      - name: Run optional contract tests
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('package.json') != ''
         run: npm run --if-present test
 
       - name: Upload compiled ABI and bytecode
         uses: actions/upload-artifact@v4
-        if: steps.blockchain-project.outputs.exists == 'true' && hashFiles('blockchain/build/solc/**') != ''
+        if: steps.contract-project.outputs.exists == 'true' && hashFiles('build/solc/**') != ''
         with:
           name: blockchain-solc-artifacts
-          path: blockchain/build/solc/
+          path: build/solc/
           retention-days: 7
