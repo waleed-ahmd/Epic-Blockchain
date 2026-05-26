@@ -7,7 +7,7 @@
  * 1. Canonicalising encrypted message envelopes
  * 2. Hashing each canonical envelope with keccak256
  * 3. Building a Merkle root for a conversation segment
- * 4. Creating a Merkle proof for one message
+ * 4. Creating Merkle proofs for messages in the segment
  * 5. Verifying a Merkle proof
  *
  * It expects ethers.js v6 to be available.
@@ -28,13 +28,13 @@
    */
   const DIRECT_ENVELOPE_FIELDS = [
     "ciphertext",
+    "conversation_id",
     "message_id",
     "message_type",
     "ratchet_header_enc",
     "recipient_id",
     "schema_version",
     "sender_id",
-    "sent_at",
   ];
 
   /**
@@ -87,7 +87,19 @@
    *
    * The result is a clean object with only the exact fields we hash.
    *
-   * @param {Object} envelope - Raw envelope from backend.
+   * Expected envelope:
+   * {
+   *   "schema_version": "securemsg-envelope-v1",
+   *   "message_type": "direct",
+   *   "conversation_id": "direct-2-3",
+   *   "message_id": "1",
+   *   "sender_id": "3",
+   *   "recipient_id": "2",
+   *   "ciphertext": "<base64>",
+   *   "ratchet_header_enc": "<base64>"
+   * }
+   *
+   * @param {Object} envelope - Raw encrypted message envelope.
    * @returns {Object} Normalised direct envelope.
    */
   function normaliseDirectEnvelope(envelope) {
@@ -97,13 +109,13 @@
 
     const normalised = {
       ciphertext: envelope.ciphertext,
+      conversation_id: envelope.conversation_id,
       message_id: idToString(envelope.message_id, "message_id"),
       message_type: envelope.message_type,
       ratchet_header_enc: envelope.ratchet_header_enc,
       recipient_id: idToString(envelope.recipient_id, "recipient_id"),
       schema_version: envelope.schema_version,
       sender_id: idToString(envelope.sender_id, "sender_id"),
-      sent_at: envelope.sent_at,
     };
 
     if (normalised.schema_version !== EXPECTED_SCHEMA_VERSION) {
@@ -120,28 +132,24 @@
       throw new Error("ciphertext must be a non-empty string");
     }
 
-    if (!isNonEmptyString(normalised.ratchet_header_enc)) {
-      throw new Error("ratchet_header_enc must be a non-empty string");
+    if (!isNonEmptyString(normalised.conversation_id)) {
+      throw new Error("conversation_id must be a non-empty string");
     }
 
     if (!isNonEmptyString(normalised.message_id)) {
       throw new Error("message_id must be a non-empty string");
     }
 
-    if (!isNonEmptyString(normalised.sender_id)) {
-      throw new Error("sender_id must be a non-empty string");
+    if (!isNonEmptyString(normalised.ratchet_header_enc)) {
+      throw new Error("ratchet_header_enc must be a non-empty string");
     }
 
     if (!isNonEmptyString(normalised.recipient_id)) {
       throw new Error("recipient_id must be a non-empty string");
     }
 
-    if (
-      typeof normalised.sent_at !== "number" ||
-      !Number.isInteger(normalised.sent_at) ||
-      normalised.sent_at <= 0
-    ) {
-      throw new Error("sent_at must be a positive integer timestamp");
+    if (!isNonEmptyString(normalised.sender_id)) {
+      throw new Error("sender_id must be a non-empty string");
     }
 
     return normalised;
@@ -152,8 +160,8 @@
    *
    * Why?
    * JSON can be written in different orders:
-   * {"message_id":"1","sender_id":"1"}
-   * {"sender_id":"1","message_id":"1"}
+   * {"message_id":"1","sender_id":"3"}
+   * {"sender_id":"3","message_id":"1"}
    *
    * These look the same to humans, but produce different hashes.
    *
@@ -162,7 +170,8 @@
    * - exact field order
    * - no whitespace
    * - IDs as strings
-   * - sent_at as a number
+   * - conversation_id included
+   * - sent_at excluded
    *
    * @param {Object} envelope - Raw encrypted message envelope.
    * @returns {string} Canonical JSON string.
@@ -231,6 +240,8 @@
    * @returns {string[][]} Merkle tree levels.
    */
   function buildMerkleTreeFromHashes(leafHashes) {
+    requireEthers();
+
     if (!Array.isArray(leafHashes) || leafHashes.length === 0) {
       throw new Error("At least one leaf hash is required");
     }
@@ -366,6 +377,8 @@
    * @returns {boolean} true if proof reconstructs expected root.
    */
   function verifyMerkleProof(leafHash, proof, expectedRoot) {
+    requireEthers();
+
     if (!ethers.isHexString(leafHash, 32)) {
       throw new Error("leafHash must be a bytes32 hex string");
     }
@@ -404,15 +417,62 @@
   }
 
   /**
-   * Convenience function:
-   * Given a segment and a target message index, produce everything needed
-   * for blockchain recording and later verification.
+   * Builds proof data for all messages in a closed segment.
+   *
+   * This is the main function Person 1's client should call when a segment
+   * closes after 5 accepted messages or 10 minutes.
+   *
+   * It returns:
+   * - segmentRoot: the Merkle root to record on Sepolia
+   * - leafHashes: message_id -> envelope hash
+   * - messageProofs: message_id -> Merkle proof
+   * - canonicalJsonByMessageId: message_id -> canonical JSON string
+   *
+   * @param {Object[]} envelopes - Segment envelopes in exact client-accepted order.
+   * @returns {Object} Segment proof data for all messages.
+   */
+  function buildSegmentProof(envelopes) {
+    const result = buildMerkleTreeFromEnvelopes(envelopes);
+
+    const leafHashesByMessageId = {};
+    const messageProofsByMessageId = {};
+    const canonicalJsonByMessageId = {};
+
+    for (let index = 0; index < envelopes.length; index++) {
+      const normalisedEnvelope = normaliseDirectEnvelope(envelopes[index]);
+      const messageId = normalisedEnvelope.message_id;
+
+      if (Object.prototype.hasOwnProperty.call(leafHashesByMessageId, messageId)) {
+        throw new Error(`Duplicate message_id in segment: ${messageId}`);
+      }
+
+      leafHashesByMessageId[messageId] = result.leafHashes[index];
+      messageProofsByMessageId[messageId] = getMerkleProof(result.tree, index);
+      canonicalJsonByMessageId[messageId] = result.canonicalJsonList[index];
+    }
+
+    return {
+      segmentRoot: result.root,
+      leafHashes: leafHashesByMessageId,
+      messageProofs: messageProofsByMessageId,
+      canonicalJsonByMessageId,
+      messageCount: result.messageCount,
+      allLeafHashes: result.leafHashes,
+      tree: result.tree,
+    };
+  }
+
+  /**
+   * Optional helper:
+   * Builds proof data for one target message only.
+   *
+   * This keeps the old behaviour available if needed for testing.
    *
    * @param {Object[]} envelopes - Segment envelopes in exact segment order.
    * @param {number} targetIndex - Index of target message in the segment.
-   * @returns {Object} Segment proof data.
+   * @returns {Object} Single-message proof data.
    */
-  function buildSegmentProof(envelopes, targetIndex) {
+  function buildMessageProof(envelopes, targetIndex) {
     const result = buildMerkleTreeFromEnvelopes(envelopes);
 
     if (!Number.isInteger(targetIndex) || targetIndex < 0) {
@@ -424,13 +484,15 @@
     }
 
     const proof = getMerkleProof(result.tree, targetIndex);
+    const normalisedEnvelope = normaliseDirectEnvelope(envelopes[targetIndex]);
 
     return {
-      root: result.root,
+      segmentRoot: result.root,
       leafHash: result.leafHashes[targetIndex],
       proof,
       messageCount: result.messageCount,
       targetIndex,
+      messageId: normalisedEnvelope.message_id,
       canonicalJson: result.canonicalJsonList[targetIndex],
       allLeafHashes: result.leafHashes,
     };
@@ -448,5 +510,6 @@
     getMerkleProof,
     verifyMerkleProof,
     buildSegmentProof,
+    buildMessageProof,
   };
 })();

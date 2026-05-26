@@ -3,31 +3,36 @@ pragma solidity ^0.8.24;
 
 /**
  * @title MessageIntegrity
- * @notice Stores Merkle roots for SecureMsg conversation segments.
+ * @notice Stores Merkle roots for client-created SecureMsg conversation segments.
  *
  * A conversation segment is a small batch of encrypted message envelopes.
- * In this project, one segment is closed when either:
- *   - 5 messages are collected, or
+ * In this project, the client closes a segment when either:
+ *   - 5 accepted messages are collected, or
  *   - 10 minutes have passed,
  * whichever happens first.
  *
- * The contract stores only the Merkle root of the segment.
+ * The client creates the segment locally, calculates the Merkle root off-chain,
+ * and records only that Merkle root on-chain.
+ *
+ * The contract stores only the Merkle root and minimal segment metadata.
  * It does NOT store plaintext messages.
  * It does NOT store ciphertext messages.
+ * It does NOT store full message envelopes.
+ * It does NOT store Merkle proofs.
  * It does NOT store user private keys.
  */
 contract MessageIntegrity {
     /**
-     * @notice A blockchain record for one conversation segment.
+     * @notice A blockchain record for one client-created conversation segment.
      *
      * segmentRoot:
      *   The Merkle root created from encrypted message envelope hashes.
      *
      * conversationRef:
-     *   A backend reference for the conversation, for example "conversation-12".
+     *   A client-generated conversation reference, for example "direct-2-3".
      *
      * segmentRef:
-     *   A backend reference for the segment, for example "conversation-12-segment-3".
+     *   A client-generated segment reference, for example "direct-2-3-local-seg-1".
      *
      * messageCount:
      *   Number of messages included in this segment.
@@ -69,11 +74,11 @@ contract MessageIntegrity {
     );
 
     /**
-     * @notice Records a Merkle root for a conversation segment.
+     * @notice Records a Merkle root for a client-created conversation segment.
      *
      * @param segmentRoot The Merkle root of the segment.
-     * @param conversationRef Backend conversation reference.
-     * @param segmentRef Backend segment reference.
+     * @param conversationRef Client-generated conversation reference.
+     * @param segmentRef Client-generated segment reference.
      * @param messageCount Number of messages in this segment.
      *
      * @return recordId The ID of the stored blockchain record.
@@ -121,8 +126,8 @@ contract MessageIntegrity {
      * @param recordId The blockchain record ID.
      *
      * @return segmentRoot The stored Merkle root.
-     * @return conversationRef Backend conversation reference.
-     * @return segmentRef Backend segment reference.
+     * @return conversationRef Client-generated conversation reference.
+     * @return segmentRef Client-generated segment reference.
      * @return messageCount Number of messages in the segment.
      * @return timestamp Blockchain timestamp when recorded.
      * @return recorder Wallet address that recorded the segment root.
@@ -155,7 +160,7 @@ contract MessageIntegrity {
     }
 
     /**
-     * @notice Returns the total number of segment records.
+     * @notice Returns the total number of segment records stored in the contract.
      */
     function getRecordCount() external view returns (uint256) {
         return recordCount;

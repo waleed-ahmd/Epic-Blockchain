@@ -6,10 +6,14 @@
  * This file connects the browser to the MessageIntegrity smart contract.
  *
  * It is responsible for:
- * 1. Connecting to MetaMask
- * 2. Making sure the user is on Sepolia
- * 3. Recording a conversation segment Merkle root on-chain
+ * 1. Connecting to MetaMask for writing transactions
+ * 2. Making sure the user is on Sepolia for recording
+ * 3. Recording a client-created conversation segment Merkle root on-chain
  * 4. Reading an existing segment record from the contract
+ *
+ * Important:
+ * - Recording requires MetaMask because it writes to the blockchain.
+ * - Reading/verifying does not request MetaMask account access.
  *
  * It expects ethers.js v6 to be loaded before this file:
  *
@@ -20,161 +24,172 @@
 (function () {
   "use strict";
 
-  /**
-   * Sepolia details.
-   */
-  const SEPOLIA_CHAIN_ID_DECIMAL = 11155111;
-  const SEPOLIA_CHAIN_ID_HEX = "0xaa36a7";
+  const CONFIG = window.SecureMsgConfig || {};
 
+  /**
+   * Network and deployment details.
+   *
+   * Put local/deployment-specific values in ../config.js. That file is ignored
+   * by Git; ../config.example.js documents the expected shape.
+   */
+  const SEPOLIA_CHAIN_ID_DECIMAL =
+    CONFIG.sepoliaChainIdDecimal || 11155111;
+  const SEPOLIA_CHAIN_ID_HEX = CONFIG.sepoliaChainIdHex || "0xaa36a7";
+  const SEPOLIA_READ_RPC_URL = CONFIG.sepoliaReadRpcUrl || null;
+  const EXPECTED_CONTRACT_ADDRESS = CONFIG.expectedContractAddress || null;
+  const ALLOWED_CONTRACT_ADDRESSES = Array.isArray(CONFIG.allowedContractAddresses)
+    ? CONFIG.allowedContractAddresses
+    : [];
   /**
    * Minimal ABI for the MessageIntegrity contract.
    *
-   * This ABI includes only the functions/events that the verification page needs.
+   * This ABI includes only the functions/events that the recording and
+   * verification pages need.
    *
    * It must match the Solidity contract:
    * MessageIntegrity.sol
    */
   const MESSAGE_INTEGRITY_ABI = [
     {
-      "anonymous": false,
-      "inputs": [
+      anonymous: false,
+      inputs: [
         {
-          "indexed": true,
-          "internalType": "uint256",
-          "name": "recordId",
-          "type": "uint256"
+          indexed: true,
+          internalType: "uint256",
+          name: "recordId",
+          type: "uint256",
         },
         {
-          "indexed": true,
-          "internalType": "bytes32",
-          "name": "segmentRoot",
-          "type": "bytes32"
+          indexed: true,
+          internalType: "bytes32",
+          name: "segmentRoot",
+          type: "bytes32",
         },
         {
-          "indexed": false,
-          "internalType": "string",
-          "name": "conversationRef",
-          "type": "string"
+          indexed: false,
+          internalType: "string",
+          name: "conversationRef",
+          type: "string",
         },
         {
-          "indexed": false,
-          "internalType": "string",
-          "name": "segmentRef",
-          "type": "string"
+          indexed: false,
+          internalType: "string",
+          name: "segmentRef",
+          type: "string",
         },
         {
-          "indexed": false,
-          "internalType": "uint8",
-          "name": "messageCount",
-          "type": "uint8"
+          indexed: false,
+          internalType: "uint8",
+          name: "messageCount",
+          type: "uint8",
         },
         {
-          "indexed": false,
-          "internalType": "uint256",
-          "name": "timestamp",
-          "type": "uint256"
+          indexed: false,
+          internalType: "uint256",
+          name: "timestamp",
+          type: "uint256",
         },
         {
-          "indexed": true,
-          "internalType": "address",
-          "name": "recorder",
-          "type": "address"
-        }
+          indexed: true,
+          internalType: "address",
+          name: "recorder",
+          type: "address",
+        },
       ],
-      "name": "SegmentRootRecorded",
-      "type": "event"
+      name: "SegmentRootRecorded",
+      type: "event",
     },
     {
-      "inputs": [
+      inputs: [
         {
-          "internalType": "bytes32",
-          "name": "segmentRoot",
-          "type": "bytes32"
+          internalType: "bytes32",
+          name: "segmentRoot",
+          type: "bytes32",
         },
         {
-          "internalType": "string",
-          "name": "conversationRef",
-          "type": "string"
+          internalType: "string",
+          name: "conversationRef",
+          type: "string",
         },
         {
-          "internalType": "string",
-          "name": "segmentRef",
-          "type": "string"
+          internalType: "string",
+          name: "segmentRef",
+          type: "string",
         },
         {
-          "internalType": "uint8",
-          "name": "messageCount",
-          "type": "uint8"
-        }
+          internalType: "uint8",
+          name: "messageCount",
+          type: "uint8",
+        },
       ],
-      "name": "recordSegmentRoot",
-      "outputs": [
+      name: "recordSegmentRoot",
+      outputs: [
         {
-          "internalType": "uint256",
-          "name": "recordId",
-          "type": "uint256"
-        }
+          internalType: "uint256",
+          name: "recordId",
+          type: "uint256",
+        },
       ],
-      "stateMutability": "nonpayable",
-      "type": "function"
+      stateMutability: "nonpayable",
+      type: "function",
     },
     {
-      "inputs": [
+      inputs: [
         {
-          "internalType": "uint256",
-          "name": "recordId",
-          "type": "uint256"
-        }
+          internalType: "uint256",
+          name: "recordId",
+          type: "uint256",
+        },
       ],
-      "name": "getRecord",
-      "outputs": [
+      name: "getRecord",
+      outputs: [
         {
-          "internalType": "bytes32",
-          "name": "segmentRoot",
-          "type": "bytes32"
+          internalType: "bytes32",
+          name: "segmentRoot",
+          type: "bytes32",
         },
         {
-          "internalType": "string",
-          "name": "conversationRef",
-          "type": "string"
+          internalType: "string",
+          name: "conversationRef",
+          type: "string",
         },
         {
-          "internalType": "string",
-          "name": "segmentRef",
-          "type": "string"
+          internalType: "string",
+          name: "segmentRef",
+          type: "string",
         },
         {
-          "internalType": "uint8",
-          "name": "messageCount",
-          "type": "uint8"
+          internalType: "uint8",
+          name: "messageCount",
+          type: "uint8",
         },
         {
-          "internalType": "uint256",
-          "name": "timestamp",
-          "type": "uint256"
+          internalType: "uint256",
+          name: "timestamp",
+          type: "uint256",
         },
         {
-          "internalType": "address",
-          "name": "recorder",
-          "type": "address"
-        }
+          internalType: "address",
+          name: "recorder",
+          type: "address",
+        },
       ],
-      "stateMutability": "view",
-      "type": "function"
+      stateMutability: "view",
+      type: "function",
     },
     {
-      "inputs": [],
-      "name": "getRecordCount",
-      "outputs": [
+      inputs: [],
+      name: "getRecordCount",
+      outputs: [
         {
-          "internalType": "uint256",
-          "name": "",
-          "type": "uint256"
-        }
+          internalType: "uint256",
+          name: "",
+          type: "uint256",
+        },
       ],
-      "stateMutability": "view",
-      "type": "function"
-    }
+      stateMutability: "view",
+      type: "function",
+    },
   ];
 
   /**
@@ -190,6 +205,8 @@
 
   /**
    * Checks that MetaMask or another Ethereum wallet is available.
+   *
+   * Required only for writing transactions.
    */
   function requireEthereumWallet() {
     if (!window.ethereum) {
@@ -216,6 +233,42 @@
 
     if (!ethers.isAddress(contractAddress)) {
       throw new Error("Invalid contract address");
+    }
+  }
+
+  function normaliseAddress(address) {
+    requireEthers();
+    return ethers.getAddress(address).toLowerCase();
+  }
+
+  function getAllowedContractAddresses() {
+    const addresses = [];
+
+    if (EXPECTED_CONTRACT_ADDRESS) {
+      addresses.push(EXPECTED_CONTRACT_ADDRESS);
+    }
+
+    addresses.push(...ALLOWED_CONTRACT_ADDRESSES);
+
+    return addresses.filter(Boolean);
+  }
+
+  function validateConfiguredContractAddress(contractAddress) {
+    validateContractAddress(contractAddress);
+
+    const allowedAddresses = getAllowedContractAddresses();
+
+    if (allowedAddresses.length === 0) {
+      throw new Error(
+        "Trusted contract address is not configured. Set expectedContractAddress in config.js."
+      );
+    }
+
+    const normalisedContractAddress = normaliseAddress(contractAddress);
+    const allowed = allowedAddresses.map(normaliseAddress);
+
+    if (!allowed.includes(normalisedContractAddress)) {
+      throw new Error("Proof package uses an unapproved contract address.");
     }
   }
 
@@ -249,13 +302,15 @@
    * Requests wallet connection.
    *
    * This opens MetaMask and asks the user to connect their wallet.
+   *
+   * Use this only for writing/recording segment roots.
    */
   async function connectWallet() {
     requireEthers();
     requireEthereumWallet();
 
     await window.ethereum.request({
-      method: "eth_requestAccounts"
+      method: "eth_requestAccounts",
     });
 
     const provider = new ethers.BrowserProvider(window.ethereum);
@@ -265,7 +320,7 @@
     return {
       provider,
       signer,
-      address
+      address,
     };
   }
 
@@ -273,12 +328,14 @@
    * Makes sure MetaMask is on Sepolia.
    *
    * If the user is on another chain, this asks MetaMask to switch.
+   *
+   * Used for recording/writing transactions.
    */
   async function ensureSepoliaNetwork() {
     requireEthereumWallet();
 
     const currentChainId = await window.ethereum.request({
-      method: "eth_chainId"
+      method: "eth_chainId",
     });
 
     if (currentChainId === SEPOLIA_CHAIN_ID_HEX) {
@@ -288,7 +345,7 @@
     try {
       await window.ethereum.request({
         method: "wallet_switchEthereumChain",
-        params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }]
+        params: [{ chainId: SEPOLIA_CHAIN_ID_HEX }],
       });
     } catch (error) {
       throw new Error(
@@ -317,21 +374,54 @@
 
     return {
       contract,
-      signerAddress: address
+      signerAddress: address,
     };
   }
 
   /**
-   * Creates a contract instance connected with a provider.
+   * Creates a read-only provider.
+   *
+   * This does NOT request MetaMask account access.
+   *
+   * Reading works in two ways:
+   * 1. If SEPOLIA_READ_RPC_URL is set, use it.
+   * 2. Otherwise, use window.ethereum as a read-only browser provider.
+   *
+   * Note:
+   * If using window.ethereum, MetaMask must still be installed,
+   * but the user will not be asked to connect an account.
+   */
+  function getReadOnlyProvider() {
+    requireEthers();
+
+    if (SEPOLIA_READ_RPC_URL) {
+      return new ethers.JsonRpcProvider(
+        SEPOLIA_READ_RPC_URL,
+        SEPOLIA_CHAIN_ID_DECIMAL
+      );
+    }
+
+    if (window.ethereum) {
+      return new ethers.BrowserProvider(window.ethereum);
+    }
+
+    throw new Error(
+      "No read provider available. Install MetaMask or configure SEPOLIA_READ_RPC_URL."
+    );
+  }
+
+  /**
+   * Creates a contract instance connected with a read-only provider.
    *
    * Use this when you only want to read from the blockchain.
+   *
+   * This does not call eth_requestAccounts and does not force the user
+   * to connect their wallet.
    */
   async function getReadableContract(contractAddress) {
     validateContractAddress(contractAddress);
 
-    await ensureSepoliaNetwork();
-
-    const { provider } = await connectWallet();
+    const provider = getReadOnlyProvider();
 
     const contract = new ethers.Contract(
       contractAddress,
@@ -367,11 +457,13 @@
   /**
    * Records a segment root on the MessageIntegrity smart contract.
    *
+   * This is called by the client after it creates a local conversation segment.
+   *
    * @param {Object} input
    * @param {string} input.contractAddress - Deployed contract address.
    * @param {string} input.segmentRoot - Merkle root as bytes32 hex string.
-   * @param {string} input.conversationRef - Backend conversation reference.
-   * @param {string} input.segmentRef - Backend segment reference.
+   * @param {string} input.conversationRef - Client-generated conversation reference.
+   * @param {string} input.segmentRef - Client-generated segment reference.
    * @param {number} input.messageCount - Number of messages in the segment.
    *
    * @returns {Object} Blockchain proof object.
@@ -386,7 +478,7 @@
       segmentRoot,
       conversationRef,
       segmentRef,
-      messageCount
+      messageCount,
     } = input;
 
     validateContractAddress(contractAddress);
@@ -395,7 +487,9 @@
     requireNonEmptyString(segmentRef, "segmentRef");
     validateMessageCount(messageCount);
 
-    const { contract, signerAddress } = await getWritableContract(contractAddress);
+    const { contract, signerAddress } = await getWritableContract(
+      contractAddress
+    );
 
     const transaction = await contract.recordSegmentRoot(
       segmentRoot,
@@ -418,12 +512,16 @@
       conversation_ref: conversationRef,
       segment_ref: segmentRef,
       message_count: messageCount,
-      recorder: signerAddress
+      recorder: signerAddress,
     };
   }
 
   /**
    * Reads one segment record from the smart contract.
+   *
+   * This is used during verification.
+   *
+   * It does not request MetaMask account access.
    *
    * @param {string} contractAddress - Deployed contract address.
    * @param {number} recordId - Blockchain record ID.
@@ -448,7 +546,7 @@
       segment_ref: result[2],
       message_count: Number(result[3]),
       timestamp: Number(result[4]),
-      recorder: result[5]
+      recorder: result[5],
     };
   }
 
@@ -456,6 +554,8 @@
    * Reads the total number of records stored in the contract.
    *
    * Useful for testing after deployment.
+   *
+   * This does not request MetaMask account access.
    */
   async function fetchRecordCount(contractAddress) {
     validateContractAddress(contractAddress);
@@ -473,12 +573,16 @@
     SEPOLIA_CHAIN_ID_DECIMAL,
     SEPOLIA_CHAIN_ID_HEX,
     MESSAGE_INTEGRITY_ABI,
+    EXPECTED_CONTRACT_ADDRESS,
+    ALLOWED_CONTRACT_ADDRESSES,
     connectWallet,
     ensureSepoliaNetwork,
     getWritableContract,
     getReadableContract,
+    getReadOnlyProvider,
+    validateConfiguredContractAddress,
     recordSegmentRoot,
     fetchSegmentRecord,
-    fetchRecordCount
+    fetchRecordCount,
   };
 })();
