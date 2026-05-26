@@ -8,6 +8,11 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'verification-page/**'
+      - 'Testing/**'
+      - 'contracts/**'
+      - 'scripts/**'
+      - 'config.example.js'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -21,6 +26,11 @@ on:
     paths:
       - 'src/**'
       - 'public/**'
+      - 'verification-page/**'
+      - 'Testing/**'
+      - 'contracts/**'
+      - 'scripts/**'
+      - 'config.example.js'
       - 'package.json'
       - 'package-lock.json'
       - 'tsconfig.json'
@@ -60,9 +70,13 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        if: steps.frontend-project.outputs.exists == 'true'
+      - name: Install dependencies from lockfile
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') != ''
         run: npm ci
+
+      - name: Install dependencies
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') == ''
+        run: npm install
 
       - name: Type check
         if: steps.frontend-project.outputs.exists == 'true'
@@ -74,7 +88,13 @@ jobs:
 
       - name: Verify build output
         if: steps.frontend-project.outputs.exists == 'true'
-        run: test -d dist && test -f dist/index.html
+        run: |
+          test -d dist
+          test -f dist/verification-page/verification.html
+          test -f dist/verification-page/verification.js
+          test -f dist/verification-page/verification.css
+          test -f dist/verification-page/merkleUtils.js
+          test -f dist/verification-page/blockchainClient.js
 
       - name: Build Storybook
         if: steps.frontend-project.outputs.exists == 'true'

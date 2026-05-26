@@ -43,28 +43,34 @@ jobs:
       - name: Verify required files exist
         if: steps.verification-page.outputs.exists == 'true'
         run: |
-          test -f verification-page/index.html
-          test -f verification-page/verify.js
-          test -f verification-page/style.css
-          test -f verification-page/README.md
+          test -f verification-page/verification.html
+          test -f verification-page/verification.js
+          test -f verification-page/verification.css
+          test -f verification-page/merkleUtils.js
+          test -f verification-page/blockchainClient.js
 
       - name: Check JavaScript syntax
         if: steps.verification-page.outputs.exists == 'true'
-        run: node --check verification-page/verify.js
+        run: |
+          node --check verification-page/verification.js
+          node --check verification-page/merkleUtils.js
+          node --check verification-page/blockchainClient.js
 
-      - name: Check page references verifier script
+      - name: Check page references current assets
         if: steps.verification-page.outputs.exists == 'true'
-        run: grep -Eq 'src=["'\'']\.?/verify\.js["'\'']' verification-page/index.html
+        run: |
+          grep -Fq 'href="verification.css"' verification-page/verification.html
+          grep -Fq 'src="merkleUtils.js"' verification-page/verification.html
+          grep -Fq 'src="blockchainClient.js"' verification-page/verification.html
+          grep -Fq 'src="verification.js"' verification-page/verification.html
 
       - name: Check planned verifier functions exist
         if: steps.verification-page.outputs.exists == 'true'
         run: |
-          grep -Eq 'function[[:space:]]+getQueryParams|const[[:space:]]+getQueryParams[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+fetchEnvelope|const[[:space:]]+fetchEnvelope[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+fetchBackendProof|const[[:space:]]+fetchBackendProof[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+canonicaliseEnvelope|const[[:space:]]+canonicaliseEnvelope[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+computeEnvelopeDigest|const[[:space:]]+computeEnvelopeDigest[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+getContract|const[[:space:]]+getContract[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+fetchOnChainRecord|const[[:space:]]+fetchOnChainRecord[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+verifyMessageAutomatically|const[[:space:]]+verifyMessageAutomatically[[:space:]]*=' verification-page/verify.js
-          grep -Eq 'function[[:space:]]+displayResult|const[[:space:]]+displayResult[[:space:]]*=' verification-page/verify.js
+          grep -Eq 'function[[:space:]]+parseProofPackageInput|const[[:space:]]+parseProofPackageInput[[:space:]]*=' verification-page/verification.js
+          grep -Eq 'function[[:space:]]+validateProofPackage|const[[:space:]]+validateProofPackage[[:space:]]*=' verification-page/verification.js
+          grep -Eq 'function[[:space:]]+verifyProofPackage|const[[:space:]]+verifyProofPackage[[:space:]]*=' verification-page/verification.js
+          grep -Eq 'canonicaliseEnvelope' verification-page/verification.js
+          grep -Eq 'computeEnvelopeHash' verification-page/verification.js
+          grep -Eq 'verifyMerkleProof' verification-page/verification.js
+          grep -Eq 'fetchSegmentRecord' verification-page/verification.js
