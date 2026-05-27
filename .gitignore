@@ -1,6 +1,9 @@
-# Remix compiler artifacts
+# Hardhat/compiler output
 **/artifacts/
 **/artifacts/**
+cache/
+typechain-types/
+dist/
 
 # Remix plugin state folders
 deps/
@@ -13,3 +16,6 @@ states/
 # Optional
 .env
 .env.local
+.idea
+docs
+node_modules
