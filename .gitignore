@@ -1,6 +1,9 @@
-# Remix compiler artifacts
+# Hardhat/compiler output
 **/artifacts/
 **/artifacts/**
+cache/
+typechain-types/
+dist/
 
 # Remix plugin state folders
 deps/
@@ -17,3 +20,5 @@ dist/
 
 # Local browser configuration with RPC URLs / deployed addresses
 config.js
+.idea
+node_modules
