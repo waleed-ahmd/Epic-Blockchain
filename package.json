@@ -6,6 +6,31 @@
   "scripts": {
     "build": "node scripts/build.js",
     "dev": "node scripts/serve.js root",
-    "preview": "node scripts/serve.js dist"
+    "preview": "node scripts/serve.js dist",
+    "compile": "hardhat compile",
+    "test": "hardhat test",
+    "deploy:sepolia": "hardhat run scripts/deploy.ts --network sepolia"
+  },
+  "devDependencies": {
+    "@nomicfoundation/hardhat-ethers": "^4.0.12",
+    "@nomicfoundation/hardhat-ethers-chai-matchers": "^3.0.9",
+    "@nomicfoundation/hardhat-mocha": "^3.0.20",
+    "@nomicfoundation/hardhat-typechain": "^3.1.0",
+    "@typechain/ethers-v6": "^0.5.1",
+    "@types/chai": "^5.2.3",
+    "@types/mocha": "^10.0.10",
+    "chai": "^6.2.2",
+    "ethers": "^6.16.0",
+    "hardhat": "^3.6.0",
+    "mocha": "^11.7.6",
+    "ts-node": "^10.9.0",
+    "typechain": "^8.3.2",
+    "typescript": "^5.4.0"
+  },
+  "type": "module",
+  "overrides": {
+    "diff": ">=8.0.3",
+    "serialize-javascript": ">=7.0.5",
+    "ws": ">=8.21.0"
   }
 }
