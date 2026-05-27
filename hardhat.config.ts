@@ -1,5 +1,5 @@
 import "dotenv/config";
-import { defineConfig } from "hardhat/config";
+import { configVariable, defineConfig } from "hardhat/config";
 import HardhatEthers from "@nomicfoundation/hardhat-ethers";
 import HardhatTypechain from "@nomicfoundation/hardhat-typechain";
 import HardhatEthersChaiMatchers from "@nomicfoundation/hardhat-ethers-chai-matchers";
@@ -15,7 +15,7 @@ export default defineConfig({
     sepolia: {
       type: "http",
       url: "https://ethereum-sepolia-rpc.publicnode.com",
-      accounts: [process.env.WALLET_PRIVATE_KEY!],
+      accounts: [configVariable("WALLET_PRIVATE_KEY")],
     },
   },
 });
