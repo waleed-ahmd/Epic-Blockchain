@@ -87,6 +87,11 @@
           name: "signature",
           type: "bytes",
         },
+        {
+          internalType: "uint64",
+          name: "timestamp",
+          type: "uint64",
+        },
       ],
       name: "recordDigest",
       outputs: [],
@@ -362,7 +367,8 @@
     );
 
     const signature = await signer.signMessage(ethers.getBytes(segmentHash));
-    const transaction = await contract.recordDigest(segmentHash, signature);
+    const recordedAt = Math.floor(Date.now() / 1000);
+    const transaction = await contract.recordDigest(segmentHash, signature, recordedAt);
 
     await transaction.wait(1);
     const [recorder, timestamp] = await contract.getRecord(segmentHash);

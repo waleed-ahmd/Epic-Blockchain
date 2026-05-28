@@ -127,7 +127,7 @@ The page checks:
 
 ## Contract Interface
 
-### `recordDigest(bytes32 hash, bytes signature)`
+### `recordDigest(bytes32 hash, bytes signature, uint64 timestamp)`
 
 Records a signed segment hash on-chain.
 
@@ -135,8 +135,7 @@ Records a signed segment hash on-chain.
 |-----------|-------------|
 | `hash` | Segment hash produced from the batch's envelope hashes |
 | `signature` | EIP-191 signature of the segment hash, produced by the caller's wallet |
-
-The contract stores `block.timestamp`; callers cannot provide their own record time.
+| `timestamp` | Unix timestamp when the segment was recorded, non-zero and not in the future |
 
 Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 timestamp)`.
 
@@ -189,8 +188,8 @@ contract verifies the signature matches `msg.sender`.
 **Minimal on-chain storage** - the contract stores only the segment hash,
 recorder, and timestamp. Conversation and segment references stay off-chain.
 
-**Block timestamp** - the contract records `block.timestamp`, not a timestamp
-supplied by the caller.
+**Timestamp validation** - the contract rejects zero timestamps and timestamps
+that are in the future.
 
 ## Security Notes
 
