@@ -7,7 +7,7 @@
  * - accepts 1 to 5 encrypted message envelopes
  * - builds Merkle root and proofs
  * - records segment root on Sepolia
- * - generates proof packages for verification-page/index.html
+ * - generates proof packages for verification-page/verification.html
  */
 
 let latestEnvelopes = null;
@@ -180,13 +180,14 @@ function createProofPackages(envelopes, segmentProof, chainProof, segmentRef) {
       proof: {
         segment_id: segmentRef,
         segment_index: index,
-        record_id: chainProof.record_id,
         transaction_hash: chainProof.transaction_hash,
         contract_address: chainProof.contract_address,
         chain_name: chainProof.chain_name,
         chain_id: chainProof.chain_id,
         segment_root: segmentProof.segmentRoot,
         leaf_hash: segmentProof.leafHashes[messageId],
+        recorded_timestamp: chainProof.recorded_timestamp,
+        recorder: chainProof.recorder,
         merkle_proof: segmentProof.messageProofs[messageId]
       }
     };

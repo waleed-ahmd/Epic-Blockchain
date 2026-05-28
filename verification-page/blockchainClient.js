@@ -55,39 +55,9 @@
       inputs: [
         {
           indexed: true,
-          internalType: "uint256",
-          name: "recordId",
-          type: "uint256",
-        },
-        {
-          indexed: true,
           internalType: "bytes32",
-          name: "segmentRoot",
+          name: "hash",
           type: "bytes32",
-        },
-        {
-          indexed: false,
-          internalType: "string",
-          name: "conversationRef",
-          type: "string",
-        },
-        {
-          indexed: false,
-          internalType: "string",
-          name: "segmentRef",
-          type: "string",
-        },
-        {
-          indexed: false,
-          internalType: "uint8",
-          name: "messageCount",
-          type: "uint8",
-        },
-        {
-          indexed: false,
-          internalType: "uint256",
-          name: "timestamp",
-          type: "uint256",
         },
         {
           indexed: true,
@@ -95,95 +65,57 @@
           name: "recorder",
           type: "address",
         },
+        {
+          indexed: false,
+          internalType: "uint256",
+          name: "timestamp",
+          type: "uint256",
+        },
       ],
-      name: "SegmentRootRecorded",
+      name: "DigestRecorded",
       type: "event",
     },
     {
       inputs: [
         {
           internalType: "bytes32",
-          name: "segmentRoot",
+          name: "hash",
           type: "bytes32",
         },
         {
-          internalType: "string",
-          name: "conversationRef",
-          type: "string",
-        },
-        {
-          internalType: "string",
-          name: "segmentRef",
-          type: "string",
-        },
-        {
-          internalType: "uint8",
-          name: "messageCount",
-          type: "uint8",
-        },
-      ],
-      name: "recordSegmentRoot",
-      outputs: [
-        {
-          internalType: "uint256",
-          name: "recordId",
-          type: "uint256",
-        },
-      ],
-      stateMutability: "nonpayable",
-      type: "function",
-    },
-    {
-      inputs: [
-        {
-          internalType: "uint256",
-          name: "recordId",
-          type: "uint256",
-        },
-      ],
-      name: "getRecord",
-      outputs: [
-        {
-          internalType: "bytes32",
-          name: "segmentRoot",
-          type: "bytes32",
-        },
-        {
-          internalType: "string",
-          name: "conversationRef",
-          type: "string",
-        },
-        {
-          internalType: "string",
-          name: "segmentRef",
-          type: "string",
-        },
-        {
-          internalType: "uint8",
-          name: "messageCount",
-          type: "uint8",
+          internalType: "bytes",
+          name: "signature",
+          type: "bytes",
         },
         {
           internalType: "uint256",
           name: "timestamp",
           type: "uint256",
         },
+      ],
+      name: "recordDigest",
+      outputs: [],
+      stateMutability: "nonpayable",
+      type: "function",
+    },
+    {
+      inputs: [
+        {
+          internalType: "bytes32",
+          name: "hash",
+          type: "bytes32",
+        },
+      ],
+      name: "getRecord",
+      outputs: [
         {
           internalType: "address",
           name: "recorder",
           type: "address",
         },
-      ],
-      stateMutability: "view",
-      type: "function",
-    },
-    {
-      inputs: [],
-      name: "getRecordCount",
-      outputs: [
         {
           internalType: "uint256",
-          name: "",
+          name: "timestamp",
           type: "uint256",
         },
       ],
@@ -374,6 +306,7 @@
 
     return {
       contract,
+      signer,
       signerAddress: address,
     };
   }
@@ -433,38 +366,13 @@
   }
 
   /**
-   * Extracts the recordId from the SegmentRootRecorded event.
-   *
-   * The smart contract emits an event after storing the segment root.
-   * This function searches the transaction receipt logs and finds that event.
-   */
-  function extractRecordIdFromReceipt(contract, receipt) {
-    for (const log of receipt.logs) {
-      try {
-        const parsedLog = contract.interface.parseLog(log);
-
-        if (parsedLog && parsedLog.name === "SegmentRootRecorded") {
-          return Number(parsedLog.args.recordId);
-        }
-      } catch (error) {
-        // Ignore logs that do not belong to this contract/interface.
-      }
-    }
-
-    throw new Error("SegmentRootRecorded event not found in transaction receipt");
-  }
-
-  /**
-   * Records a segment root on the MessageIntegrity smart contract.
+   * Records a signed segment root on the MessageIntegrity smart contract.
    *
    * This is called by the client after it creates a local conversation segment.
    *
    * @param {Object} input
    * @param {string} input.contractAddress - Deployed contract address.
    * @param {string} input.segmentRoot - Merkle root as bytes32 hex string.
-   * @param {string} input.conversationRef - Client-generated conversation reference.
-   * @param {string} input.segmentRef - Client-generated segment reference.
-   * @param {number} input.messageCount - Number of messages in the segment.
    *
    * @returns {Object} Blockchain proof object.
    */
@@ -473,45 +381,28 @@
       throw new Error("recordSegmentRoot input object is required");
     }
 
-    const {
-      contractAddress,
-      segmentRoot,
-      conversationRef,
-      segmentRef,
-      messageCount,
-    } = input;
+    const { contractAddress, segmentRoot } = input;
 
     validateContractAddress(contractAddress);
     validateBytes32(segmentRoot, "segmentRoot");
-    requireNonEmptyString(conversationRef, "conversationRef");
-    requireNonEmptyString(segmentRef, "segmentRef");
-    validateMessageCount(messageCount);
 
-    const { contract, signerAddress } = await getWritableContract(
+    const { contract, signer, signerAddress } = await getWritableContract(
       contractAddress
     );
 
-    const transaction = await contract.recordSegmentRoot(
-      segmentRoot,
-      conversationRef,
-      segmentRef,
-      messageCount
-    );
+    const timestamp = Math.floor(Date.now() / 1000);
+    const signature = await signer.signMessage(ethers.getBytes(segmentRoot));
+    const transaction = await contract.recordDigest(segmentRoot, signature, timestamp);
 
-    const receipt = await transaction.wait(1);
-
-    const recordId = extractRecordIdFromReceipt(contract, receipt);
+    await transaction.wait(1);
 
     return {
-      record_id: recordId,
       segment_root: segmentRoot,
       transaction_hash: transaction.hash,
       contract_address: contractAddress,
       chain_name: "sepolia",
       chain_id: SEPOLIA_CHAIN_ID_DECIMAL,
-      conversation_ref: conversationRef,
-      segment_ref: segmentRef,
-      message_count: messageCount,
+      recorded_timestamp: timestamp,
       recorder: signerAddress,
     };
   }
@@ -524,46 +415,25 @@
    * It does not request MetaMask account access.
    *
    * @param {string} contractAddress - Deployed contract address.
-   * @param {number} recordId - Blockchain record ID.
+   * @param {string} segmentRoot - Segment root / hash to look up.
    *
    * @returns {Object} On-chain segment record.
    */
-  async function fetchSegmentRecord(contractAddress, recordId) {
+  async function fetchSegmentRecord(contractAddress, segmentRoot) {
     validateContractAddress(contractAddress);
-
-    if (!Number.isInteger(recordId) || recordId <= 0) {
-      throw new Error("recordId must be a positive integer");
-    }
+    validateBytes32(segmentRoot, "segmentRoot");
 
     const contract = await getReadableContract(contractAddress);
 
-    const result = await contract.getRecord(recordId);
+    const result = await contract.getRecord(segmentRoot);
+    const timestamp = Number(result[1]);
 
     return {
-      record_id: recordId,
-      segment_root: result[0],
-      conversation_ref: result[1],
-      segment_ref: result[2],
-      message_count: Number(result[3]),
-      timestamp: Number(result[4]),
-      recorder: result[5],
+      segment_root: segmentRoot,
+      recorder: result[0],
+      timestamp,
+      recorded: timestamp !== 0,
     };
-  }
-
-  /**
-   * Reads the total number of records stored in the contract.
-   *
-   * Useful for testing after deployment.
-   *
-   * This does not request MetaMask account access.
-   */
-  async function fetchRecordCount(contractAddress) {
-    validateContractAddress(contractAddress);
-
-    const contract = await getReadableContract(contractAddress);
-    const count = await contract.getRecordCount();
-
-    return Number(count);
   }
 
   /**
@@ -583,6 +453,5 @@
     validateConfiguredContractAddress,
     recordSegmentRoot,
     fetchSegmentRecord,
-    fetchRecordCount,
   };
 })();

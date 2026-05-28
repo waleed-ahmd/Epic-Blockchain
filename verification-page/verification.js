@@ -74,10 +74,6 @@ function validateProofPackage(packageData) {
 
   const proof = packageData.proof;
 
-  if (!Number.isInteger(Number(proof.record_id)) || Number(proof.record_id) <= 0) {
-    throw new Error("proof.record_id is missing or invalid.");
-  }
-
   if (!proof.contract_address || !ethers.isAddress(proof.contract_address)) {
     throw new Error("proof.contract_address is missing or invalid.");
   }
@@ -203,49 +199,44 @@ async function verifyProofPackage() {
 
     const onChainRecord = await SecureMsgBlockchain.fetchSegmentRecord(
       proof.contract_address,
-      Number(proof.record_id)
+      proof.segment_root
     );
 
     displayJson("onChainOutput", onChainRecord);
 
-    const packageRoot = String(proof.segment_root).toLowerCase();
-    const onChainRoot = String(onChainRecord.segment_root).toLowerCase();
-
-    if (packageRoot !== onChainRoot) {
+    if (!onChainRecord.recorded) {
       setFinalResult(
-        "FAIL — The proof package segment root does not match the Sepolia blockchain record.",
+        "FAIL — The proof package segment root has not been recorded on Sepolia.",
         "fail"
       );
 
-      setStatus("Verification failed at on-chain root comparison.", "error");
+      setStatus("Verification failed at on-chain record lookup.", "error");
       return;
     }
 
     if (
-      envelope.conversation_id &&
-      onChainRecord.conversation_ref &&
-      envelope.conversation_id !== onChainRecord.conversation_ref
+      proof.recorded_timestamp &&
+      Number(proof.recorded_timestamp) !== Number(onChainRecord.timestamp)
     ) {
       setFinalResult(
-        "FAIL — Envelope conversation_id does not match the on-chain conversation reference.",
+        "FAIL — Proof timestamp does not match the Sepolia blockchain record.",
         "fail"
       );
 
-      setStatus("Verification failed at conversation reference check.", "error");
+      setStatus("Verification failed at timestamp comparison.", "error");
       return;
     }
 
     if (
-      proof.segment_id &&
-      onChainRecord.segment_ref &&
-      proof.segment_id !== onChainRecord.segment_ref
+      proof.recorder &&
+      ethers.getAddress(proof.recorder) !== ethers.getAddress(onChainRecord.recorder)
     ) {
       setFinalResult(
-        "FAIL — Proof segment_id does not match the on-chain segment reference.",
+        "FAIL — Proof recorder does not match the Sepolia blockchain record.",
         "fail"
       );
 
-      setStatus("Verification failed at segment reference check.", "error");
+      setStatus("Verification failed at recorder comparison.", "error");
       return;
     }
 

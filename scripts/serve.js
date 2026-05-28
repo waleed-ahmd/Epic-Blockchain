@@ -1,9 +1,9 @@
-"use strict";
+import fs from "node:fs";
+import http from "node:http";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const fs = require("fs");
-const http = require("http");
-const path = require("path");
-
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const projectRoot = path.resolve(__dirname, "..");
 const mode = process.argv[2] === "dist" ? "dist" : "root";
 const rootDir = mode === "dist" ? path.join(projectRoot, "dist") : projectRoot;
