@@ -1,163 +1,55 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+
 /**
  * @title MessageIntegrity
- * @notice Stores Merkle roots for SecureMsg conversation segments.
+ * @notice Records keccak256 hashes 5 messages on-chain.
  *
- * A conversation segment is a small batch of encrypted message envelopes.
- * In this project, one segment is closed when either:
- *   - 5 messages are collected, or
- *   - 10 minutes have passed,
- * whichever happens first.
- *
- * The contract stores only the Merkle root of the segment.
- * It does NOT store plaintext messages.
- * It does NOT store ciphertext messages.
- * It does NOT store user private keys.
+ * The caller signs the of 5 messages hash off-chain and submits it with their signature.
+ * The contract verifies the signature matches msg.sender, stores the timestamp,
+ * It proves the identity and providing a retrievable on-chain record.
  */
 contract MessageIntegrity {
-    /**
-     * @notice A blockchain record for one conversation segment.
-     *
-     * segmentRoot:
-     *   The Merkle root created from encrypted message envelope hashes.
-     *
-     * conversationRef:
-     *   A backend reference for the conversation, for example "conversation-12".
-     *
-     * segmentRef:
-     *   A backend reference for the segment, for example "conversation-12-segment-3".
-     *
-     * messageCount:
-     *   Number of messages included in this segment.
-     *   For this project, this should be between 1 and 5.
-     *
-     * timestamp:
-     *   The blockchain timestamp when the segment root was recorded.
-     *
-     * recorder:
-     *   The wallet address that submitted the segment root.
-     */
-    struct SegmentRecord {
-        bytes32 segmentRoot;
-        string conversationRef;
-        string segmentRef;
-        uint8 messageCount;
-        uint256 timestamp;
+    struct DigestRecord {
         address recorder;
+        uint256 timestamp;
     }
 
-    // recordId => SegmentRecord
-    mapping(uint256 => SegmentRecord) private records;
+    /// @notice Look up a recorded digest by its hash. timestamp == 0 means not recorded.
+    mapping(bytes32 => DigestRecord) public records;
 
-    // Total number of records stored.
-    // Record IDs start from 1.
-    uint256 private recordCount;
+    event DigestRecorded(bytes32 indexed hash, address indexed recorder, uint256 timestamp);
 
     /**
-     * @notice Emitted whenever a new segment root is recorded.
+     * @notice Records a the hash of 5 messages. The caller must have signed the hash.
+     * @param hash      keccak256 hash of 5 messages.
+     * @param signature EIP-191 signature of hash produced by msg.sender's key.
+     * @param timestamp Unix timestamp (seconds) when the conversation segment was recorded.
      */
-    event SegmentRootRecorded(
-        uint256 indexed recordId,
-        bytes32 indexed segmentRoot,
-        string conversationRef,
-        string segmentRef,
-        uint8 messageCount,
-        uint256 timestamp,
-        address indexed recorder
-    );
+    function recordDigest(bytes32 hash, bytes calldata signature, uint256 timestamp) external {
+        require(hash != bytes32(0), "Hash cannot be empty");
+        require(signature.length > 0, "Signature cannot be empty");
+        require(timestamp > 0, "Timestamp cannot be zero");
+        require(timestamp <= block.timestamp, "Timestamp cannot be in the future");
 
-    /**
-     * @notice Records a Merkle root for a conversation segment.
-     *
-     * @param segmentRoot The Merkle root of the segment.
-     * @param conversationRef Backend conversation reference.
-     * @param segmentRef Backend segment reference.
-     * @param messageCount Number of messages in this segment.
-     *
-     * @return recordId The ID of the stored blockchain record.
-     */
-    function recordSegmentRoot(
-        bytes32 segmentRoot,
-        string calldata conversationRef,
-        string calldata segmentRef,
-        uint8 messageCount
-    ) external returns (uint256 recordId) {
-        require(segmentRoot != bytes32(0), "Segment root cannot be empty");
-        require(bytes(conversationRef).length > 0, "Conversation reference required");
-        require(bytes(segmentRef).length > 0, "Segment reference required");
-        require(messageCount > 0, "Message count must be greater than zero");
-        require(messageCount <= 5, "Message count cannot exceed 5");
+        address recovered = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(hash), signature);
+        require(recovered == msg.sender, "Signature does not match caller");
 
-        recordCount += 1;
-        recordId = recordCount;
-
-        records[recordId] = SegmentRecord({
-            segmentRoot: segmentRoot,
-            conversationRef: conversationRef,
-            segmentRef: segmentRef,
-            messageCount: messageCount,
-            timestamp: block.timestamp,
-            recorder: msg.sender
-        });
-
-        emit SegmentRootRecorded(
-            recordId,
-            segmentRoot,
-            conversationRef,
-            segmentRef,
-            messageCount,
-            block.timestamp,
-            msg.sender
-        );
-
-        return recordId;
+        records[hash] = DigestRecord({ recorder: msg.sender, timestamp: timestamp });
+        emit DigestRecorded(hash, msg.sender, timestamp);
     }
 
     /**
-     * @notice Retrieves a stored segment record by record ID.
-     *
-     * @param recordId The blockchain record ID.
-     *
-     * @return segmentRoot The stored Merkle root.
-     * @return conversationRef Backend conversation reference.
-     * @return segmentRef Backend segment reference.
-     * @return messageCount Number of messages in the segment.
-     * @return timestamp Blockchain timestamp when recorded.
-     * @return recorder Wallet address that recorded the segment root.
+     * @notice Retrieve the on-chain record for a given segment hash.
+     * @param hash keccak256 hash of the conversation segment.
+     * @return recorder  The address that submitted this hash.
+     * @return timestamp The block timestamp when it was recorded (0 if not found).
      */
-    function getRecord(uint256 recordId)
-        external
-        view
-        returns (
-            bytes32 segmentRoot,
-            string memory conversationRef,
-            string memory segmentRef,
-            uint8 messageCount,
-            uint256 timestamp,
-            address recorder
-        )
-    {
-        require(recordId > 0, "Record ID must be greater than zero");
-        require(recordId <= recordCount, "Record does not exist");
-
-        SegmentRecord memory record = records[recordId];
-
-        return (
-            record.segmentRoot,
-            record.conversationRef,
-            record.segmentRef,
-            record.messageCount,
-            record.timestamp,
-            record.recorder
-        );
-    }
-
-    /**
-     * @notice Returns the total number of segment records.
-     */
-    function getRecordCount() external view returns (uint256) {
-        return recordCount;
+    function getRecord(bytes32 hash) external view returns (address recorder, uint256 timestamp) {
+        DigestRecord memory r = records[hash];
+        return (r.recorder, r.timestamp);
     }
 }
