@@ -4,9 +4,6 @@
   "private": true,
   "description": "SecureMsg blockchain verification page and MessageIntegrity contract.",
   "scripts": {
-    "build": "node scripts/build.js",
-    "dev": "node scripts/serve.js root",
-    "preview": "node scripts/serve.js dist",
     "compile": "hardhat compile",
     "test": "hardhat test",
     "deploy": "HARDHAT_NETWORK=sepolia hardhat run scripts/deploy.ts"

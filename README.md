@@ -26,9 +26,7 @@ verification-page/digestUtils.js      Envelope hashing and segment digest helper
 verification-page/blockchainClient.js Sepolia contract read/write helper
 config.example.js                     Safe browser config template committed to Git
 config.js                             Local browser config ignored by Git
-package.json                          Build, test, deploy, and local server scripts
-scripts/build.js                      Creates the dist build output
-scripts/serve.js                      Serves source or built files locally
+package.json                          Compile, test, and deploy scripts
 scripts/deploy.ts                     Deploys the contract to Sepolia
 ```
 
@@ -114,21 +112,10 @@ npm run deploy
 The deployed address is printed to stdout. Update `config.js`, this README, and
 any client integration with the new contract address.
 
-## Development Server
+## Verification Page
 
-Start a local server:
-
-```bash
-npm run dev
-```
-
-Then open:
-
-```text
-http://localhost:4173/verification-page/verification.html
-```
-
-Paste or upload a proof package, then click **Verify Proof Package**.
+Open `verification-page/verification.html` in a browser, then paste or upload a
+proof package and click **Verify Proof Package**.
 
 The page checks:
 
@@ -137,29 +124,6 @@ The page checks:
 - The segment hash list rebuilds the package segment hash.
 - The segment hash has been recorded on Sepolia.
 - The proof contract address matches the trusted address in `config.js`.
-
-## Build And Preview
-
-Create a static build:
-
-```bash
-npm run build
-```
-
-This writes the browser files to `dist/`. The build copies your local
-`config.js` into `dist/config.js` if it exists, so `dist/` is ignored by Git.
-
-Preview the built output:
-
-```bash
-npm run preview
-```
-
-Then open:
-
-```text
-http://localhost:4173/verification-page/verification.html
-```
 
 ## Contract Interface
 
@@ -232,7 +196,6 @@ supplied by the caller.
 
 - Do not commit `config.js`.
 - Do not commit `.env`.
-- Do not commit `dist/`.
 - Use a test wallet for Sepolia deployment.
 - Keep `expectedContractAddress` set to the deployed contract you trust.
 - This verifies encrypted-message integrity, not plaintext meaning or delivery.
