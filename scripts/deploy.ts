@@ -6,7 +6,7 @@ async function main(): Promise<void> {
   const { WALLET_PRIVATE_KEY } = process.env;
   if (!WALLET_PRIVATE_KEY) throw new Error("WALLET_PRIVATE_KEY is not set in .env");
 
-  const { ethers } = await network.create();
+  const { ethers } = await network.create("sepolia");
   const [signer] = await ethers.getSigners();
   const contract = await new MessageIntegrity__factory(signer).deploy();
   await contract.waitForDeployment();
