@@ -9,9 +9,9 @@ proof package against the deployed `MessageIntegrity` smart contract.
 ## What This Project Does
 
 - Hashes a canonical encrypted message envelope with `keccak256`.
-- Verifies that the envelope belongs to a Merkle-rooted message segment.
-- Signs the segment root with the recording wallet.
-- Records the signed segment root in a Sepolia `MessageIntegrity` contract.
+- Verifies that the envelope hash is included in a small segment hash list.
+- Signs the segment hash with the recording wallet.
+- Records the signed segment hash in a Sepolia `MessageIntegrity` contract.
 - Confirms that the local proof package matches the on-chain record.
 - Stores only a segment hash, recorder address, and timestamp on-chain.
 
@@ -22,7 +22,7 @@ contracts/MessageIntegrity.sol        Smart contract for recording segment hashe
 verification-page/verification.html   Browser verification page
 verification-page/verification.css    Verification page styling
 verification-page/verification.js     Proof package verification logic
-verification-page/merkleUtils.js      Envelope hashing and Merkle proof helpers
+verification-page/digestUtils.js      Envelope hashing and segment digest helpers
 verification-page/blockchainClient.js Sepolia contract read/write helper
 config.example.js                     Safe config template committed to Git
 config.js                             Local config ignored by Git
@@ -48,12 +48,14 @@ window.SecureMsgConfig = {
   sepoliaChainIdHex: "0xaa36a7",
   sepoliaReadRpcUrl: "https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY",
   expectedContractAddress: "0xYourDeployedMessageIntegrityContractAddress",
-  allowedContractAddresses: []
+  allowedContractAddresses: [],
+  maxSegmentEnvelopes: 5
 };
 ```
 
 `config.js` is ignored by Git, so RPC URLs and deployment-specific addresses are
-not committed.
+not committed. This file is loaded by the browser, so never put wallet private
+keys or server-only secrets in it.
 
 `expectedContractAddress` is required for production-style verification. The
 verification page rejects proof packages that point at any other contract.
@@ -83,9 +85,11 @@ npm install
 cp .env.example .env
 ```
 
-Then add your Sepolia wallet private key to `.env`:
+Then add your Sepolia RPC URL and wallet private key to `.env`. This file is
+used by Hardhat and deploy scripts, not by the browser:
 
 ```env
+SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
 WALLET_PRIVATE_KEY=0xyour_private_key_here
 ```
 
@@ -131,9 +135,9 @@ Paste or upload a proof package, then click **Verify Proof Package**.
 The page checks:
 
 - The envelope can be canonicalised and hashed.
-- The optional proof leaf hash matches the computed envelope hash.
-- The Merkle proof rebuilds the package segment root.
-- The segment root has been recorded on Sepolia.
+- The optional proof envelope hash matches the computed envelope hash.
+- The segment hash list rebuilds the package segment hash.
+- The segment hash has been recorded on Sepolia.
 - The proof contract address matches the trusted address in `config.js`.
 
 ## Build And Preview
@@ -161,17 +165,18 @@ http://localhost:4173/verification-page/verification.html
 
 ## Contract Interface
 
-### `recordDigest(bytes32 hash, bytes signature, uint256 timestamp)`
+### `recordDigest(bytes32 hash, bytes signature)`
 
 Records a signed segment hash on-chain.
 
 | Parameter | Description |
 |-----------|-------------|
-| `hash` | Segment hash, currently the Merkle root produced for the message batch |
-| `signature` | EIP-191 signature of `hash` produced by the caller's wallet |
-| `timestamp` | Unix timestamp when the segment was recorded, non-zero and not in the future |
+| `hash` | Segment hash produced from the batch's envelope hashes |
+| `signature` | EIP-191 signature of the segment hash, produced by the caller's wallet |
 
-Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint256 timestamp)`.
+The contract stores `block.timestamp`; callers cannot provide their own record time.
+
+Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 timestamp)`.
 
 ### `getRecord(bytes32 hash) -> (address recorder, uint256 timestamp)`
 
@@ -199,30 +204,31 @@ the hash has not been recorded.
     "contract_address": "0x...",
     "chain_name": "sepolia",
     "chain_id": 11155111,
-    "segment_root": "0x...",
-    "leaf_hash": "0x...",
+    "segment_hash": "0x...",
+    "envelope_hash": "0x...",
+    "segment_hashes": [
+      "0x...",
+      "0x..."
+    ],
     "recorded_timestamp": 1234567890,
-    "recorder": "0x...",
-    "merkle_proof": [
-      {
-        "siblingHash": "0x...",
-        "position": "right"
-      }
-    ]
+    "recorder": "0x..."
   }
 }
 ```
 
 ## Design Decisions
 
-**Batching** - up to 5 messages are hashed into a segment root rather than one
+**Batching** - up to 5 messages are hashed into a segment hash rather than one
 transaction per message.
 
-**Signature verification** - the caller signs the segment root off-chain and the
+**Signature verification** - the caller signs the segment hash off-chain and the
 contract verifies the signature matches `msg.sender`.
 
 **Minimal on-chain storage** - the contract stores only the segment hash,
 recorder, and timestamp. Conversation and segment references stay off-chain.
+
+**Block timestamp** - the contract records `block.timestamp`, not a timestamp
+supplied by the caller.
 
 ## Security Notes
 

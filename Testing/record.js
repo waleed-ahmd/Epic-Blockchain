@@ -4,16 +4,20 @@
  * SecureMsg Segment Recorder Logic
  *
  * Developer/demo utility:
- * - accepts 1 to 5 encrypted message envelopes
- * - builds Merkle root and proofs
- * - records segment root on Sepolia
+ * - accepts encrypted message envelopes up to the configured segment limit
+ * - builds one segment hash from envelope hashes
+ * - records the signed segment hash on Sepolia
  * - generates proof packages for verification-page/verification.html
  */
 
 let latestEnvelopes = null;
-let latestSegmentProof = null;
+let latestSegmentDigest = null;
 let latestChainProof = null;
 let latestProofPackages = null;
+
+function getMaxSegmentEnvelopes() {
+  return SecureMsgDigest.MAX_SEGMENT_ENVELOPES;
+}
 
 function getElement(id) {
   return document.getElementById(id);
@@ -33,12 +37,12 @@ function setStatus(elementId, message, type = "success") {
   element.className = `status-text ${type}`;
 }
 
-function resetMerkleOutputs() {
-  displayText("segmentRootOutput", "Not built yet.");
+function resetDigestOutputs() {
+  displayText("segmentHashOutput", "Not built yet.");
   displayText("messageCountOutput", "Not built yet.");
-  displayText("leafHashesOutput", "Not built yet.");
-  displayText("messageProofsOutput", "Not built yet.");
-  displayText("treeOutput", "Not built yet.");
+  displayText("envelopeHashesOutput", "Not built yet.");
+  displayText("segmentHashListOutput", "Not built yet.");
+  displayText("canonicalEnvelopesOutput", "Not built yet.");
   displayText("chainProofOutput", "No blockchain proof yet.");
   displayText("proofPackagesOutput", "No proof packages yet.");
 
@@ -46,7 +50,7 @@ function resetMerkleOutputs() {
   getElement("copyProofPackagesButton").disabled = true;
 
   latestEnvelopes = null;
-  latestSegmentProof = null;
+  latestSegmentDigest = null;
   latestChainProof = null;
   latestProofPackages = null;
 }
@@ -70,8 +74,12 @@ function readEnvelopeArrayFromInput() {
     throw new Error("Envelope input must be a JSON array.");
   }
 
-  if (parsed.length < 1 || parsed.length > 5) {
-    throw new Error("A segment must contain between 1 and 5 envelopes.");
+  const maxSegmentEnvelopes = getMaxSegmentEnvelopes();
+
+  if (parsed.length < 1 || parsed.length > maxSegmentEnvelopes) {
+    throw new Error(
+      `A segment must contain between 1 and ${maxSegmentEnvelopes} envelopes.`
+    );
   }
 
   return parsed;
@@ -111,41 +119,40 @@ function loadSampleEnvelopes() {
     }
   ];
 
-  getElement("conversationRef").value = "direct-1-2";
   getElement("segmentRef").value = "direct-1-2-local-seg-1";
   getElement("envelopesInput").value = JSON.stringify(sample, null, 2);
 
-  resetMerkleOutputs();
+  resetDigestOutputs();
   setStatus("localStatus", "Sample envelopes loaded.", "success");
   setStatus("recordStatus", "", "success");
 }
 
 function clearPage() {
   getElement("envelopesInput").value = "";
-  resetMerkleOutputs();
+  resetDigestOutputs();
   setStatus("localStatus", "", "success");
   setStatus("recordStatus", "", "success");
 }
 
-function buildMerkleRootAndProofs() {
+function buildSegmentHash() {
   try {
-    setStatus("localStatus", "Building Merkle root and proofs...", "success");
+    setStatus("localStatus", "Building segment hash...", "success");
     setStatus("recordStatus", "", "success");
 
     const envelopes = readEnvelopeArrayFromInput();
 
-    const segmentProof = SecureMsgMerkle.buildSegmentProof(envelopes);
+    const segmentDigest = SecureMsgDigest.buildSegmentDigest(envelopes);
 
     latestEnvelopes = envelopes;
-    latestSegmentProof = segmentProof;
+    latestSegmentDigest = segmentDigest;
     latestChainProof = null;
     latestProofPackages = null;
 
-    displayText("segmentRootOutput", segmentProof.segmentRoot);
-    displayText("messageCountOutput", String(segmentProof.messageCount));
-    displayJson("leafHashesOutput", segmentProof.leafHashes);
-    displayJson("messageProofsOutput", segmentProof.messageProofs);
-    displayJson("treeOutput", segmentProof.tree);
+    displayText("segmentHashOutput", segmentDigest.segmentHash);
+    displayText("messageCountOutput", String(segmentDigest.messageCount));
+    displayJson("envelopeHashesOutput", segmentDigest.envelopeHashes);
+    displayJson("segmentHashListOutput", segmentDigest.allEnvelopeHashes);
+    displayJson("canonicalEnvelopesOutput", segmentDigest.canonicalJsonList);
     displayText("chainProofOutput", "No blockchain proof yet.");
     displayText("proofPackagesOutput", "Record on Sepolia first to generate proof packages.");
 
@@ -154,25 +161,21 @@ function buildMerkleRootAndProofs() {
 
     setStatus(
       "localStatus",
-      "Merkle root and message proofs built successfully.",
+      "Segment hash built successfully.",
       "success"
     );
   } catch (error) {
-    resetMerkleOutputs();
+    resetDigestOutputs();
     setStatus("localStatus", error.message, "error");
   }
 }
 
-function createProofPackages(envelopes, segmentProof, chainProof, segmentRef) {
+function createProofPackages(envelopes, segmentDigest, chainProof, segmentRef) {
   return envelopes.map((envelope, index) => {
     const messageId = String(envelope.message_id);
 
-    if (!segmentProof.leafHashes[messageId]) {
-      throw new Error(`Missing leaf hash for message_id ${messageId}`);
-    }
-
-    if (!segmentProof.messageProofs[messageId]) {
-      throw new Error(`Missing Merkle proof for message_id ${messageId}`);
+    if (!segmentDigest.envelopeHashes[messageId]) {
+      throw new Error(`Missing envelope hash for message_id ${messageId}`);
     }
 
     return {
@@ -184,11 +187,11 @@ function createProofPackages(envelopes, segmentProof, chainProof, segmentRef) {
         contract_address: chainProof.contract_address,
         chain_name: chainProof.chain_name,
         chain_id: chainProof.chain_id,
-        segment_root: segmentProof.segmentRoot,
-        leaf_hash: segmentProof.leafHashes[messageId],
+        segment_hash: segmentDigest.segmentHash,
+        envelope_hash: segmentDigest.envelopeHashes[messageId],
+        segment_hashes: segmentDigest.allEnvelopeHashes,
         recorded_timestamp: chainProof.recorded_timestamp,
-        recorder: chainProof.recorder,
-        merkle_proof: segmentProof.messageProofs[messageId]
+        recorder: chainProof.recorder
       }
     };
   });
@@ -196,20 +199,15 @@ function createProofPackages(envelopes, segmentProof, chainProof, segmentRef) {
 
 async function recordOnSepolia() {
   try {
-    if (!latestSegmentProof || !latestEnvelopes) {
-      throw new Error("Build the Merkle root before recording.");
+    if (!latestSegmentDigest || !latestEnvelopes) {
+      throw new Error("Build the segment hash before recording.");
     }
 
     const contractAddress = getElement("contractAddress").value.trim();
-    const conversationRef = getElement("conversationRef").value.trim();
     const segmentRef = getElement("segmentRef").value.trim();
 
     if (!contractAddress) {
       throw new Error("Contract address is required.");
-    }
-
-    if (!conversationRef) {
-      throw new Error("Conversation reference is required.");
     }
 
     if (!segmentRef) {
@@ -222,19 +220,16 @@ async function recordOnSepolia() {
       "warning"
     );
 
-    const chainProof = await SecureMsgBlockchain.recordSegmentRoot({
+    const chainProof = await SecureMsgBlockchain.recordSegmentHash({
       contractAddress,
-      segmentRoot: latestSegmentProof.segmentRoot,
-      conversationRef,
-      segmentRef,
-      messageCount: latestSegmentProof.messageCount
+      segmentHash: latestSegmentDigest.segmentHash
     });
 
     latestChainProof = chainProof;
 
     const proofPackages = createProofPackages(
       latestEnvelopes,
-      latestSegmentProof,
+      latestSegmentDigest,
       latestChainProof,
       segmentRef
     );
@@ -248,7 +243,7 @@ async function recordOnSepolia() {
 
     setStatus(
       "recordStatus",
-      "Segment root recorded on Sepolia and proof packages generated.",
+      "Segment hash recorded on Sepolia and proof packages generated.",
       "success"
     );
   } catch (error) {
@@ -274,7 +269,7 @@ async function copyProofPackages() {
 function initialisePage() {
   getElement("loadSampleButton").addEventListener("click", loadSampleEnvelopes);
   getElement("clearButton").addEventListener("click", clearPage);
-  getElement("buildRootButton").addEventListener("click", buildMerkleRootAndProofs);
+  getElement("buildRootButton").addEventListener("click", buildSegmentHash);
   getElement("recordButton").addEventListener("click", recordOnSepolia);
   getElement("copyProofPackagesButton").addEventListener("click", copyProofPackages);
 

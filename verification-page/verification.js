@@ -5,7 +5,7 @@
  *
  * Production-style verification:
  * - The proof package is provided by the client.
- * - This page verifies the proof package against the on-chain Sepolia root.
+ * - This page verifies the proof package against the on-chain Sepolia digest.
  * - It does not fetch envelope/proof from backend.
  * - It does not include sample/test proof data.
  */
@@ -38,8 +38,8 @@ function resetOutputs() {
   displayText("envelopeOutput", "Not loaded yet.");
   displayText("proofOutput", "Not loaded yet.");
   displayText("canonicalOutput", "Not computed yet.");
-  displayText("leafHashOutput", "Not computed yet.");
-  displayText("merkleProofOutput", "Not checked yet.");
+  displayText("envelopeHashOutput", "Not computed yet.");
+  displayText("segmentHashOutput", "Not checked yet.");
   displayText("onChainOutput", "Not loaded yet.");
   setFinalResult("Not verified yet.", "neutral");
   setStatus("", "success");
@@ -80,16 +80,20 @@ function validateProofPackage(packageData) {
 
   SecureMsgBlockchain.validateConfiguredContractAddress(proof.contract_address);
 
-  if (!proof.segment_root || !ethers.isHexString(proof.segment_root, 32)) {
-    throw new Error("proof.segment_root is missing or invalid.");
+  if (!proof.segment_hash || !ethers.isHexString(proof.segment_hash, 32)) {
+    throw new Error("proof.segment_hash is missing or invalid.");
   }
 
-  if (proof.leaf_hash && !ethers.isHexString(proof.leaf_hash, 32)) {
-    throw new Error("proof.leaf_hash must be a bytes32 hex string.");
+  if (proof.envelope_hash && !ethers.isHexString(proof.envelope_hash, 32)) {
+    throw new Error("proof.envelope_hash must be a bytes32 hex string.");
   }
 
-  if (!Array.isArray(proof.merkle_proof)) {
-    throw new Error("proof.merkle_proof must be an array.");
+  if (!Array.isArray(proof.segment_hashes)) {
+    throw new Error("proof.segment_hashes must be an array.");
+  }
+
+  if (!Number.isInteger(Number(proof.segment_index)) || Number(proof.segment_index) < 0) {
+    throw new Error("proof.segment_index is missing or invalid.");
   }
 
   if (Number(proof.chain_id) !== SecureMsgBlockchain.SEPOLIA_CHAIN_ID_DECIMAL) {
@@ -136,8 +140,8 @@ async function verifyProofPackage() {
     displayText("envelopeOutput", "Loading...");
     displayText("proofOutput", "Loading...");
     displayText("canonicalOutput", "Computing...");
-    displayText("leafHashOutput", "Computing...");
-    displayText("merkleProofOutput", "Checking...");
+    displayText("envelopeHashOutput", "Computing...");
+    displayText("segmentHashOutput", "Checking...");
     displayText("onChainOutput", "Loading...");
 
     const packageData = parseProofPackageInput();
@@ -149,64 +153,84 @@ async function verifyProofPackage() {
     displayJson("envelopeOutput", envelope);
     displayJson("proofOutput", proof);
 
-    const canonicalJson = SecureMsgMerkle.canonicaliseEnvelope(envelope);
-    const computedLeafHash = SecureMsgMerkle.computeEnvelopeHash(envelope);
+    const canonicalJson = SecureMsgDigest.canonicaliseEnvelope(envelope);
+    const computedEnvelopeHash = SecureMsgDigest.computeEnvelopeHash(envelope);
 
     displayText("canonicalOutput", canonicalJson);
-    displayText("leafHashOutput", computedLeafHash);
+    displayText("envelopeHashOutput", computedEnvelopeHash);
 
     if (
-      proof.leaf_hash &&
-      computedLeafHash.toLowerCase() !== String(proof.leaf_hash).toLowerCase()
+      proof.envelope_hash &&
+      computedEnvelopeHash.toLowerCase() !== String(proof.envelope_hash).toLowerCase()
     ) {
-      displayJson("merkleProofOutput", {
-        computed_leaf_hash: computedLeafHash,
-        proof_leaf_hash: proof.leaf_hash,
-        leaf_hash_match: false
+      displayJson("segmentHashOutput", {
+        computed_envelope_hash: computedEnvelopeHash,
+        proof_envelope_hash: proof.envelope_hash,
+        envelope_hash_match: false
       });
 
       setFinalResult(
-        "FAIL — The local envelope hash does not match the proof package leaf hash.",
+        "FAIL — The local envelope hash does not match the proof package envelope hash.",
         "fail"
       );
 
-      setStatus("Verification failed at leaf hash check.", "error");
+      setStatus("Verification failed at envelope hash check.", "error");
       return;
     }
 
-    const merkleProofValid = SecureMsgMerkle.verifyMerkleProof(
-      computedLeafHash,
-      proof.merkle_proof,
-      proof.segment_root
-    );
+    const segmentIndex = Number(proof.segment_index);
+    const listedHash = proof.segment_hashes[segmentIndex];
 
-    displayJson("merkleProofOutput", {
-      computed_leaf_hash: computedLeafHash,
-      proof_leaf_hash: proof.leaf_hash || null,
-      expected_segment_root_from_package: proof.segment_root,
-      merkle_proof_valid: merkleProofValid
-    });
+    if (!listedHash || String(listedHash).toLowerCase() !== computedEnvelopeHash.toLowerCase()) {
+      displayJson("segmentHashOutput", {
+        computed_envelope_hash: computedEnvelopeHash,
+        segment_index: segmentIndex,
+        listed_hash_at_index: listedHash || null,
+        hash_list_match: false
+      });
 
-    if (!merkleProofValid) {
       setFinalResult(
-        "FAIL — The encrypted envelope does not match the Merkle proof.",
+        "FAIL — The local envelope hash does not match the hash list at proof.segment_index.",
         "fail"
       );
 
-      setStatus("Verification failed at Merkle proof step.", "error");
+      setStatus("Verification failed at segment hash list check.", "error");
+      return;
+    }
+
+    const computedSegmentHash = SecureMsgDigest.computeSegmentHashFromEnvelopeHashes(
+      proof.segment_hashes
+    );
+
+    displayJson("segmentHashOutput", {
+      computed_envelope_hash: computedEnvelopeHash,
+      proof_envelope_hash: proof.envelope_hash || null,
+      segment_index: segmentIndex,
+      computed_segment_hash: computedSegmentHash,
+      proof_segment_hash: proof.segment_hash,
+      segment_hash_valid: computedSegmentHash.toLowerCase() === String(proof.segment_hash).toLowerCase()
+    });
+
+    if (computedSegmentHash.toLowerCase() !== String(proof.segment_hash).toLowerCase()) {
+      setFinalResult(
+        "FAIL — The encrypted envelope hash list does not rebuild the proof package segment hash.",
+        "fail"
+      );
+
+      setStatus("Verification failed at segment hash check.", "error");
       return;
     }
 
     const onChainRecord = await SecureMsgBlockchain.fetchSegmentRecord(
       proof.contract_address,
-      proof.segment_root
+      proof.segment_hash
     );
 
     displayJson("onChainOutput", onChainRecord);
 
     if (!onChainRecord.recorded) {
       setFinalResult(
-        "FAIL — The proof package segment root has not been recorded on Sepolia.",
+        "FAIL — The proof package segment hash has not been recorded on Sepolia.",
         "fail"
       );
 

@@ -8,7 +8,7 @@
  * It is responsible for:
  * 1. Connecting to MetaMask for writing transactions
  * 2. Making sure the user is on Sepolia for recording
- * 3. Recording a client-created conversation segment Merkle root on-chain
+ * 3. Recording a client-created conversation segment hash on-chain
  * 4. Reading an existing segment record from the contract
  *
  * Important:
@@ -67,9 +67,9 @@
         },
         {
           indexed: false,
-          internalType: "uint256",
+          internalType: "uint64",
           name: "timestamp",
-          type: "uint256",
+          type: "uint64",
         },
       ],
       name: "DigestRecorded",
@@ -86,11 +86,6 @@
           internalType: "bytes",
           name: "signature",
           type: "bytes",
-        },
-        {
-          internalType: "uint256",
-          name: "timestamp",
-          type: "uint256",
         },
       ],
       name: "recordDigest",
@@ -145,15 +140,6 @@
       throw new Error(
         "No Ethereum wallet found. Please install MetaMask or use a browser with wallet support."
       );
-    }
-  }
-
-  /**
-   * Validates that a value is a non-empty string.
-   */
-  function requireNonEmptyString(value, fieldName) {
-    if (typeof value !== "string" || value.trim().length === 0) {
-      throw new Error(`${fieldName} must be a non-empty string`);
     }
   }
 
@@ -216,26 +202,11 @@
   }
 
   /**
-   * Validates message count.
-   *
-   * For this project, one segment contains 1 to 5 messages.
-   */
-  function validateMessageCount(messageCount) {
-    if (!Number.isInteger(messageCount)) {
-      throw new Error("messageCount must be an integer");
-    }
-
-    if (messageCount < 1 || messageCount > 5) {
-      throw new Error("messageCount must be between 1 and 5");
-    }
-  }
-
-  /**
    * Requests wallet connection.
    *
    * This opens MetaMask and asks the user to connect their wallet.
    *
-   * Use this only for writing/recording segment roots.
+   * Use this only for writing/recording segment hashes.
    */
   async function connectWallet() {
     requireEthers();
@@ -366,44 +337,44 @@
   }
 
   /**
-   * Records a signed segment root on the MessageIntegrity smart contract.
+   * Records a signed segment hash on the MessageIntegrity smart contract.
    *
    * This is called by the client after it creates a local conversation segment.
    *
    * @param {Object} input
    * @param {string} input.contractAddress - Deployed contract address.
-   * @param {string} input.segmentRoot - Merkle root as bytes32 hex string.
+   * @param {string} input.segmentHash - Segment hash as bytes32 hex string.
    *
    * @returns {Object} Blockchain proof object.
    */
-  async function recordSegmentRoot(input) {
+  async function recordSegmentHash(input) {
     if (!input || typeof input !== "object") {
-      throw new Error("recordSegmentRoot input object is required");
+      throw new Error("recordSegmentHash input object is required");
     }
 
-    const { contractAddress, segmentRoot } = input;
+    const { contractAddress, segmentHash } = input;
 
     validateContractAddress(contractAddress);
-    validateBytes32(segmentRoot, "segmentRoot");
+    validateBytes32(segmentHash, "segmentHash");
 
     const { contract, signer, signerAddress } = await getWritableContract(
       contractAddress
     );
 
-    const timestamp = Math.floor(Date.now() / 1000);
-    const signature = await signer.signMessage(ethers.getBytes(segmentRoot));
-    const transaction = await contract.recordDigest(segmentRoot, signature, timestamp);
+    const signature = await signer.signMessage(ethers.getBytes(segmentHash));
+    const transaction = await contract.recordDigest(segmentHash, signature);
 
     await transaction.wait(1);
+    const [recorder, timestamp] = await contract.getRecord(segmentHash);
 
     return {
-      segment_root: segmentRoot,
+      segment_hash: segmentHash,
       transaction_hash: transaction.hash,
       contract_address: contractAddress,
       chain_name: "sepolia",
       chain_id: SEPOLIA_CHAIN_ID_DECIMAL,
-      recorded_timestamp: timestamp,
-      recorder: signerAddress,
+      recorded_timestamp: Number(timestamp),
+      recorder: recorder || signerAddress,
     };
   }
 
@@ -415,21 +386,21 @@
    * It does not request MetaMask account access.
    *
    * @param {string} contractAddress - Deployed contract address.
-   * @param {string} segmentRoot - Segment root / hash to look up.
+   * @param {string} segmentHash - Segment hash to look up.
    *
    * @returns {Object} On-chain segment record.
    */
-  async function fetchSegmentRecord(contractAddress, segmentRoot) {
+  async function fetchSegmentRecord(contractAddress, segmentHash) {
     validateContractAddress(contractAddress);
-    validateBytes32(segmentRoot, "segmentRoot");
+    validateBytes32(segmentHash, "segmentHash");
 
     const contract = await getReadableContract(contractAddress);
 
-    const result = await contract.getRecord(segmentRoot);
+    const result = await contract.getRecord(segmentHash);
     const timestamp = Number(result[1]);
 
     return {
-      segment_root: segmentRoot,
+      segment_hash: segmentHash,
       recorder: result[0],
       timestamp,
       recorded: timestamp !== 0,
@@ -451,7 +422,7 @@
     getReadableContract,
     getReadOnlyProvider,
     validateConfiguredContractAddress,
-    recordSegmentRoot,
+    recordSegmentHash,
     fetchSegmentRecord,
   };
 })();

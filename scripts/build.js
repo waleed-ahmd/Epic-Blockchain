@@ -11,7 +11,7 @@ const filesToCopy = [
   "verification-page/verification.html",
   "verification-page/verification.css",
   "verification-page/verification.js",
-  "verification-page/merkleUtils.js",
+  "verification-page/digestUtils.js",
   "verification-page/blockchainClient.js",
   "contracts/MessageIntegrity.sol"
 ];
