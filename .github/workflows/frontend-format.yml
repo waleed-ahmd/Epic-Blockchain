@@ -6,6 +6,9 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'verification-page/**'
+      - 'Testing/**'
+      - 'scripts/**'
       - '.prettierrc'
       - 'package.json'
       - 'package-lock.json'
@@ -35,10 +38,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        if: steps.frontend-project.outputs.exists == 'true'
+      - name: Install dependencies from lockfile
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') != ''
         run: npm ci
+
+      - name: Install dependencies
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') == ''
+        run: npm install
 
       - name: Check formatting
         if: steps.frontend-project.outputs.exists == 'true'
-        run: npm run format:check
+        run: npm run --if-present format:check

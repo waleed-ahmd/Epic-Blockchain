@@ -1,0 +1,11 @@
+{
+  "name": "epic-blockchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SecureMsg blockchain verification page and MessageIntegrity contract.",
+  "scripts": {
+    "build": "node scripts/build.js",
+    "dev": "node scripts/serve.js root",
+    "preview": "node scripts/serve.js dist"
+  }
+}

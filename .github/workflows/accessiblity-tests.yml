@@ -6,6 +6,7 @@ on:
       - main
     paths:
       - 'src/**'
+      - 'verification-page/**'
       - '.storybook/**'
       - 'package.json'
       - 'package-lock.json'
@@ -25,25 +26,38 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - if: steps.frontend-project.outputs.exists == 'true'
+      - name: Detect Storybook project
+        id: storybook-project
+        run: |
+          if test -d .storybook; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true'
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        if: steps.frontend-project.outputs.exists == 'true'
+      - name: Install dependencies from lockfile
+        if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true' && hashFiles('package-lock.json') != ''
         run: npm ci
 
+      - name: Install dependencies
+        if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true' && hashFiles('package-lock.json') == ''
+        run: npm install
+
       - name: Install Playwright browsers
-        if: steps.frontend-project.outputs.exists == 'true'
+        if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true'
         run: npx playwright install --with-deps chromium
 
       - name: Build Storybook
-        if: steps.frontend-project.outputs.exists == 'true'
+        if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true'
         run: npm run build-storybook
 
       - name: Serve Storybook and run tests
-        if: steps.frontend-project.outputs.exists == 'true'
+        if: steps.frontend-project.outputs.exists == 'true' && steps.storybook-project.outputs.exists == 'true'
         run: |
           npx serve storybook-static -p 6006 &
           npx wait-on http://localhost:6006

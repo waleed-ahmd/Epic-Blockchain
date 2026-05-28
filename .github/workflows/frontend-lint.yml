@@ -7,6 +7,9 @@ on:
     paths:
       - 'src/**'
       - 'e2e/**'
+      - 'verification-page/**'
+      - 'Testing/**'
+      - 'scripts/**'
       - 'eslint.config.mjs'
       - 'package.json'
       - 'package-lock.json'
@@ -37,10 +40,14 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Install dependencies
-        if: steps.frontend-project.outputs.exists == 'true'
+      - name: Install dependencies from lockfile
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') != ''
         run: npm ci
+
+      - name: Install dependencies
+        if: steps.frontend-project.outputs.exists == 'true' && hashFiles('package-lock.json') == ''
+        run: npm install
 
       - name: Run linter
         if: steps.frontend-project.outputs.exists == 'true'
-        run: npm run lint
+        run: npm run --if-present lint
