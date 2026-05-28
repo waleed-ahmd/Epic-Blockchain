@@ -18,9 +18,9 @@ To verify a segment later, anyone can call `getRecord(hash)` with the segment ha
 
 ## Deployed contract
 
-| Network | Address                                 |
-|---------|-----------------------------------------|
-| Sepolia | `0xYOUR_DEPLOYED_CONTRACT_ADDRESS_HERE` |
+| Network | Address                                      |
+|---------|----------------------------------------------|
+| Sepolia | `0x699a37c68c99DF26b179b98811F5d25597FBA816` |
 
 The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.json` after running `npx hardhat compile`.
 
