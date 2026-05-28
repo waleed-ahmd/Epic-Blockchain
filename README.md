@@ -58,6 +58,12 @@ not committed.
 `expectedContractAddress` is required for production-style verification. The
 verification page rejects proof packages that point at any other contract.
 
+## Deployed Contract
+
+| Network | Address |
+|---------|---------|
+| Sepolia | `0x699a37c68c99DF26b179b98811F5d25597FBA816` |
+
 ## Smart Contract Setup
 
 ### Prerequisites
