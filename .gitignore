@@ -16,7 +16,6 @@ states/
 # Debug info
 *.dbg.json
 *.tsbuildinfo
-dist/
 
 # Optional
 .env
