@@ -27,7 +27,7 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Validate ABI
-        run: node -e "JSON.parse(require('fs').readFileSync('artifacts/contracts/MessageIntegrity.sol/MessageIntegrity.json', 'utf8')).abi"
+        run: node -e "JSON.parse(require('fs').readFileSync('abi/contracts/MessageIntegrity.sol/MessageIntegrity.json', 'utf8')).abi"
 
       - name: Run tests
         run: npx hardhat test
