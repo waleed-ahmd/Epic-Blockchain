@@ -6,38 +6,45 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title MessageIntegrity
- * @notice Records keccak256 hashes 5 messages on-chain.
+ * @notice Records keccak256 hashes of 5 messages on-chain.
  *
- * The caller signs the of 5 messages hash off-chain and submits it with their signature.
+ * The caller signs the hash of 5 messages off-chain and submits it with their signature.
  * The contract verifies the signature matches msg.sender, stores the timestamp,
- * It proves the identity and providing a retrievable on-chain record.
+ * and proves identity by providing a retrievable on-chain record.
  */
 contract MessageIntegrity {
+    // address (20 bytes) + uint64 (8 bytes) = 28 bytes, fits in one 32-byte storage slot
     struct DigestRecord {
         address recorder;
-        uint256 timestamp;
+        uint64 timestamp;
     }
 
-    /// @notice Look up a recorded digest by its hash. timestamp == 0 means not recorded.
-    mapping(bytes32 => DigestRecord) public records;
+    mapping(bytes32 => DigestRecord) private records;
 
-    event DigestRecorded(bytes32 indexed hash, address indexed recorder, uint256 timestamp);
+    event DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 timestamp);
+
+    error EmptyHash();
+    error EmptySignature();
+    error InvalidTimestamp();
+    error FutureTimestamp();
+    error AlreadyRecorded();
+    error SignerMismatch();
 
     /**
-     * @notice Records a the hash of 5 messages. The caller must have signed the hash.
-     * @param hash      keccak256 hash of 5 messages.
+     * @notice Records the hash of 5 messages. The caller must have signed the hash.
+     * @param hash    keccak256 hash of 5 messages.
      * @param signature EIP-191 signature of hash produced by msg.sender's key.
      * @param timestamp Unix timestamp (seconds) when the conversation segment was recorded.
      */
-    function recordDigest(bytes32 hash, bytes calldata signature, uint256 timestamp) external {
-        require(hash != bytes32(0), "Hash cannot be empty");
-        require(signature.length > 0, "Signature cannot be empty");
-        require(timestamp > 0, "Timestamp cannot be zero");
-        require(timestamp <= block.timestamp, "Timestamp cannot be in the future");
-        require(records[hash].timestamp == 0, "Hash already recorded");
+    function recordDigest(bytes32 hash, bytes calldata signature, uint64 timestamp) external {
+        if (hash == bytes32(0)) revert EmptyHash();
+        if (signature.length == 0) revert EmptySignature();
+        if (timestamp == 0) revert InvalidTimestamp();
+        if (timestamp > block.timestamp) revert FutureTimestamp();
+        if (records[hash].timestamp != 0) revert AlreadyRecorded();
 
         address recovered = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(hash), signature);
-        require(recovered == msg.sender, "Signature does not match caller");
+        if (recovered != msg.sender) revert SignerMismatch();
 
         records[hash] = DigestRecord({ recorder: msg.sender, timestamp: timestamp });
         emit DigestRecorded(hash, msg.sender, timestamp);
@@ -49,7 +56,7 @@ contract MessageIntegrity {
      * @return recorder  The address that submitted this hash.
      * @return timestamp The block timestamp when it was recorded (0 if not found).
      */
-    function getRecord(bytes32 hash) external view returns (address recorder, uint256 timestamp) {
+    function getRecord(bytes32 hash) external view returns (address recorder, uint64 timestamp) {
         DigestRecord memory r = records[hash];
         return (r.recorder, r.timestamp);
     }
