@@ -34,6 +34,7 @@ contract MessageIntegrity {
         require(signature.length > 0, "Signature cannot be empty");
         require(timestamp > 0, "Timestamp cannot be zero");
         require(timestamp <= block.timestamp, "Timestamp cannot be in the future");
+        require(records[hash].timestamp == 0, "Hash already recorded");
 
         address recovered = ECDSA.recover(MessageHashUtils.toEthSignedMessageHash(hash), signature);
         require(recovered == msg.sender, "Signature does not match caller");
