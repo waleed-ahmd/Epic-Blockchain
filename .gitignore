@@ -5,6 +5,10 @@ cache/
 typechain-types/
 dist/
 
+# Generated ABI build noise — keep only the contract JSON
+abi/build-info/
+abi/**/*.d.ts
+
 # Remix plugin state folders
 deps/
 states/
