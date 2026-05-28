@@ -35,25 +35,25 @@ describe("MessageIntegrity", () => {
     it("reverts when hash is zero", async () => {
       const signature = await caller.signMessage(getBytes(ZeroHash));
       await expect(contract.recordDigest(ZeroHash, signature, PAST_TIMESTAMP))
-        .to.be.revertedWith("Hash cannot be empty");
+        .to.be.revertedWithCustomError(contract, "EmptyHash");
     });
 
     it("reverts when signature is empty", async () => {
       await expect(contract.recordDigest(VALID_HASH, "0x", PAST_TIMESTAMP))
-        .to.be.revertedWith("Signature cannot be empty");
+        .to.be.revertedWithCustomError(contract, "EmptySignature");
     });
 
     it("reverts when timestamp is zero", async () => {
       const signature = await caller.signMessage(getBytes(VALID_HASH));
       await expect(contract.recordDigest(VALID_HASH, signature, 0n))
-        .to.be.revertedWith("Timestamp cannot be zero");
+        .to.be.revertedWithCustomError(contract, "InvalidTimestamp");
     });
 
     it("reverts when timestamp is in the future", async () => {
       const futureTimestamp = BigInt(Math.floor(Date.now() / 1000) + 9999);
       const signature = await caller.signMessage(getBytes(VALID_HASH));
       await expect(contract.recordDigest(VALID_HASH, signature, futureTimestamp))
-        .to.be.revertedWith("Timestamp cannot be in the future");
+        .to.be.revertedWithCustomError(contract, "FutureTimestamp");
     });
 
     it("reverts when signature does not match caller", async () => {
@@ -61,14 +61,14 @@ describe("MessageIntegrity", () => {
       const [, other] = await ethers.getSigners();
       const signature = await other.signMessage(getBytes(VALID_HASH));
       await expect(contract.connect(caller).recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
-        .to.be.revertedWith("Signature does not match caller");
+        .to.be.revertedWithCustomError(contract, "SignerMismatch");
     });
 
     it("reverts when the same hash is recorded twice", async () => {
       const signature = await caller.signMessage(getBytes(VALID_HASH));
       await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
       await expect(contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
-        .to.be.revertedWith("Hash already recorded");
+        .to.be.revertedWithCustomError(contract, "AlreadyRecorded");
     });
   });
 
