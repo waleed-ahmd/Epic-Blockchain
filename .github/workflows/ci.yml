@@ -20,11 +20,11 @@ jobs:
 
       - run: npm ci
 
-      - name: Type check
-        run: npx tsc --noEmit
-
       - name: Compile contracts
         run: npx hardhat compile
+
+      - name: Type check
+        run: npx tsc --noEmit
 
       - name: Validate ABI
         run: node -e "JSON.parse(require('fs').readFileSync('artifacts/contracts/MessageIntegrity.sol/MessageIntegrity.json', 'utf8')).abi"
