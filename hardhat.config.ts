@@ -7,7 +7,7 @@ import HardhatMocha from "@nomicfoundation/hardhat-mocha";
 
 export default defineConfig({
   plugins: [HardhatEthers, HardhatTypechain, HardhatEthersChaiMatchers, HardhatMocha],
-  solidity: "0.8.24",
+  solidity: { version: "0.8.24", settings: { evmVersion: "cancun" } },
   typechain: {
     outDir: "typechain-types",
   },
