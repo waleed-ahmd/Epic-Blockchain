@@ -2,7 +2,10 @@
   "name": "epic-blockchain",
   "version": "1.0.0",
   "private": true,
+<<<<<<< ticket-6-HashSegment
   "description": "SecureMsg blockchain verification page and MessageIntegrity contract.",
+=======
+>>>>>>> Mark-changes
   "scripts": {
     "compile": "hardhat compile",
     "test": "hardhat test",

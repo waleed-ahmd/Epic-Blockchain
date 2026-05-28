@@ -17,6 +17,7 @@ describe("MessageIntegrity", () => {
     await contract.waitForDeployment();
   });
 
+<<<<<<< ticket-6-HashSegment
   async function signHash(hash: string, signer = caller): Promise<string> {
     return signer.signMessage(getBytes(hash));
   }
@@ -24,21 +25,35 @@ describe("MessageIntegrity", () => {
   describe("recordDigest", () => {
     it("emits DigestRecorded with the provided timestamp", async () => {
       const signature = await signHash(VALID_HASH);
+=======
+  describe("recordDigest", () => {
+    it("emits DigestRecorded with the provided timestamp", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+>>>>>>> Mark-changes
       await expect(contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
         .to.emit(contract, "DigestRecorded")
         .withArgs(VALID_HASH, caller.address, PAST_TIMESTAMP);
     });
 
     it("stores the provided timestamp in the record", async () => {
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH);
       await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
 
+=======
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
+>>>>>>> Mark-changes
       const [, timestamp] = await contract.getRecord(VALID_HASH);
       expect(timestamp).to.equal(PAST_TIMESTAMP);
     });
 
     it("reverts when hash is zero", async () => {
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(ZeroHash);
+=======
+      const signature = await caller.signMessage(getBytes(ZeroHash));
+>>>>>>> Mark-changes
       await expect(contract.recordDigest(ZeroHash, signature, PAST_TIMESTAMP))
         .to.be.revertedWith("Hash cannot be empty");
     });
@@ -49,14 +64,22 @@ describe("MessageIntegrity", () => {
     });
 
     it("reverts when timestamp is zero", async () => {
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH);
+=======
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+>>>>>>> Mark-changes
       await expect(contract.recordDigest(VALID_HASH, signature, 0n))
         .to.be.revertedWith("Timestamp cannot be zero");
     });
 
     it("reverts when timestamp is in the future", async () => {
       const futureTimestamp = BigInt(Math.floor(Date.now() / 1000) + 9999);
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH);
+=======
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+>>>>>>> Mark-changes
       await expect(contract.recordDigest(VALID_HASH, signature, futureTimestamp))
         .to.be.revertedWith("Timestamp cannot be in the future");
     });
@@ -64,13 +87,21 @@ describe("MessageIntegrity", () => {
     it("reverts when signature does not match caller", async () => {
       const { ethers } = await network.create();
       const [, other] = await ethers.getSigners();
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH, other);
+=======
+      const signature = await other.signMessage(getBytes(VALID_HASH));
+>>>>>>> Mark-changes
       await expect(contract.connect(caller).recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
         .to.be.revertedWith("Signature does not match caller");
     });
 
     it("reverts when the same hash is recorded twice", async () => {
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH);
+=======
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+>>>>>>> Mark-changes
       await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
       await expect(contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
         .to.be.revertedWith("Hash already recorded");
@@ -85,9 +116,14 @@ describe("MessageIntegrity", () => {
     });
 
     it("returns recorder and provided timestamp after recording", async () => {
+<<<<<<< ticket-6-HashSegment
       const signature = await signHash(VALID_HASH);
       await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
 
+=======
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
+>>>>>>> Mark-changes
       const [recorder, timestamp] = await contract.getRecord(VALID_HASH);
       expect(recorder).to.equal(caller.address);
       expect(timestamp).to.equal(PAST_TIMESTAMP);
