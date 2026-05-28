@@ -1,112 +1,90 @@
 import { expect } from "chai";
 import { network } from "hardhat";
-import { encodeBytes32String, ZeroHash } from "ethers";
-import { anyValue } from "@nomicfoundation/hardhat-ethers-chai-matchers/withArgs";
+import { keccak256, toUtf8Bytes, ZeroHash, getBytes } from "ethers";
 import { MessageIntegrity__factory } from "../typechain-types/index.js";
 
-const VALID_ROOT = encodeBytes32String("segment-root-1");
-const CONV_REF = "conversation-1";
-const SEG_REF = "conversation-1-segment-1";
-const MSG_COUNT = 3;
+const VALID_HASH = keccak256(toUtf8Bytes("test message segment"));
+const PAST_TIMESTAMP = BigInt(Math.floor(Date.now() / 1000) - 60);
 
 describe("MessageIntegrity", () => {
   let contract: Awaited<ReturnType<MessageIntegrity__factory["deploy"]>>;
-  let signer: Awaited<ReturnType<Awaited<ReturnType<typeof network.create>>["ethers"]["getSigners"]>>[0];
+  let caller: Awaited<ReturnType<Awaited<ReturnType<typeof network.create>>["ethers"]["getSigners"]>>[0];
 
   beforeEach(async () => {
     const { ethers } = await network.create();
-    [signer] = await ethers.getSigners();
-    contract = await new MessageIntegrity__factory(signer).deploy();
+    [caller] = await ethers.getSigners();
+    contract = await new MessageIntegrity__factory(caller).deploy();
     await contract.waitForDeployment();
   });
 
-  describe("recordSegmentRoot", () => {
-    it("records a segment and returns recordId 1 for the first call", async () => {
-      const tx = await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, MSG_COUNT);
-      const receipt = await tx.wait();
-      expect(receipt).to.not.be.null;
-      expect(await contract.getRecordCount()).to.equal(1n);
+  describe("recordDigest", () => {
+    it("emits DigestRecorded with the provided timestamp", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await expect(contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
+        .to.emit(contract, "DigestRecorded")
+        .withArgs(VALID_HASH, caller.address, PAST_TIMESTAMP);
     });
 
-    it("increments recordId on each call", async () => {
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, 1);
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, "conversation-1-segment-2", 2);
-      expect(await contract.getRecordCount()).to.equal(2n);
+    it("stores the provided timestamp in the record", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
+      const [, timestamp] = await contract.getRecord(VALID_HASH);
+      expect(timestamp).to.equal(PAST_TIMESTAMP);
     });
 
-    it("emits SegmentRootRecorded with correct fields", async () => {
-      await expect(
-        contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, MSG_COUNT)
-      )
-        .to.emit(contract, "SegmentRootRecorded")
-        .withArgs(1n, VALID_ROOT, CONV_REF, SEG_REF, MSG_COUNT, anyValue, signer.address);
+    it("reverts when hash is zero", async () => {
+      const signature = await caller.signMessage(getBytes(ZeroHash));
+      await expect(contract.recordDigest(ZeroHash, signature, PAST_TIMESTAMP))
+        .to.be.revertedWith("Hash cannot be empty");
     });
 
-    it("reverts when segmentRoot is zero bytes32", async () => {
-      await expect(
-        contract.recordSegmentRoot(ZeroHash, CONV_REF, SEG_REF, MSG_COUNT)
-      ).to.be.revertedWith("Segment root cannot be empty");
+    it("reverts when signature is empty", async () => {
+      await expect(contract.recordDigest(VALID_HASH, "0x", PAST_TIMESTAMP))
+        .to.be.revertedWith("Signature cannot be empty");
     });
 
-    it("reverts when conversationRef is empty", async () => {
-      await expect(
-        contract.recordSegmentRoot(VALID_ROOT, "", SEG_REF, MSG_COUNT)
-      ).to.be.revertedWith("Conversation reference required");
+    it("reverts when timestamp is zero", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await expect(contract.recordDigest(VALID_HASH, signature, 0n))
+        .to.be.revertedWith("Timestamp cannot be zero");
     });
 
-    it("reverts when segmentRef is empty", async () => {
-      await expect(
-        contract.recordSegmentRoot(VALID_ROOT, CONV_REF, "", MSG_COUNT)
-      ).to.be.revertedWith("Segment reference required");
+    it("reverts when timestamp is in the future", async () => {
+      const futureTimestamp = BigInt(Math.floor(Date.now() / 1000) + 9999);
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await expect(contract.recordDigest(VALID_HASH, signature, futureTimestamp))
+        .to.be.revertedWith("Timestamp cannot be in the future");
     });
 
-    it("reverts when messageCount is 0", async () => {
-      await expect(
-        contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, 0)
-      ).to.be.revertedWith("Message count must be greater than zero");
+    it("reverts when signature does not match caller", async () => {
+      const { ethers } = await network.create();
+      const [, other] = await ethers.getSigners();
+      const signature = await other.signMessage(getBytes(VALID_HASH));
+      await expect(contract.connect(caller).recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
+        .to.be.revertedWith("Signature does not match caller");
     });
 
-    it("reverts when messageCount exceeds 5", async () => {
-      await expect(
-        contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, 6)
-      ).to.be.revertedWith("Message count cannot exceed 5");
+    it("reverts when the same hash is recorded twice", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
+      await expect(contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP))
+        .to.be.revertedWith("Hash already recorded");
     });
   });
 
   describe("getRecord", () => {
-    it("returns stored fields for a valid recordId", async () => {
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, SEG_REF, MSG_COUNT);
-      const [root, convRef, segRef, count, , recorder] = await contract.getRecord(1n);
-      expect(root).to.equal(VALID_ROOT);
-      expect(convRef).to.equal(CONV_REF);
-      expect(segRef).to.equal(SEG_REF);
-      expect(count).to.equal(MSG_COUNT);
-      expect(recorder).to.equal(signer.address);
+    it("returns zero values for an unrecorded hash", async () => {
+      const [recorder, timestamp] = await contract.getRecord(VALID_HASH);
+      expect(recorder).to.equal("0x0000000000000000000000000000000000000000");
+      expect(timestamp).to.equal(0n);
     });
 
-    it("reverts when recordId is 0", async () => {
-      await expect(contract.getRecord(0n)).to.be.revertedWith(
-        "Record ID must be greater than zero"
-      );
-    });
-
-    it("reverts when recordId does not exist", async () => {
-      await expect(contract.getRecord(99n)).to.be.revertedWith(
-        "Record does not exist"
-      );
-    });
-  });
-
-  describe("getRecordCount", () => {
-    it("returns 0 when no records have been stored", async () => {
-      expect(await contract.getRecordCount()).to.equal(0n);
-    });
-
-    it("returns the correct count after multiple records", async () => {
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, "seg-1", 1);
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, "seg-2", 2);
-      await contract.recordSegmentRoot(VALID_ROOT, CONV_REF, "seg-3", 3);
-      expect(await contract.getRecordCount()).to.equal(3n);
+    it("returns recorder and provided timestamp after recording", async () => {
+      const signature = await caller.signMessage(getBytes(VALID_HASH));
+      await contract.recordDigest(VALID_HASH, signature, PAST_TIMESTAMP);
+      const [recorder, timestamp] = await contract.getRecord(VALID_HASH);
+      expect(recorder).to.equal(caller.address);
+      expect(timestamp).to.equal(PAST_TIMESTAMP);
     });
   });
 });
