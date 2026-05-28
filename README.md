@@ -24,8 +24,8 @@ verification-page/verification.css    Verification page styling
 verification-page/verification.js     Proof package verification logic
 verification-page/digestUtils.js      Envelope hashing and segment digest helpers
 verification-page/blockchainClient.js Sepolia contract read/write helper
-config.example.js                     Safe config template committed to Git
-config.js                             Local config ignored by Git
+config.example.js                     Safe browser config template committed to Git
+config.js                             Local browser config ignored by Git
 package.json                          Build, test, deploy, and local server scripts
 scripts/build.js                      Creates the dist build output
 scripts/serve.js                      Serves source or built files locally
@@ -34,7 +34,7 @@ scripts/deploy.ts                     Deploys the contract to Sepolia
 
 ## Local Configuration
 
-Copy the example config and create a local config file:
+Copy the example config and create a local browser config file:
 
 ```bash
 cp config.example.js config.js
@@ -53,9 +53,8 @@ window.SecureMsgConfig = {
 };
 ```
 
-`config.js` is ignored by Git, so RPC URLs and deployment-specific addresses are
-not committed. This file is loaded by the browser, so never put wallet private
-keys or server-only secrets in it.
+`config.js` is ignored by Git. It is loaded by the browser, so do not put wallet
+private keys or server-only secrets in it.
 
 `expectedContractAddress` is required for production-style verification. The
 verification page rejects proof packages that point at any other contract.
@@ -85,8 +84,7 @@ npm install
 cp .env.example .env
 ```
 
-Then add your Sepolia RPC URL and wallet private key to `.env`. This file is
-used by Hardhat and deploy scripts, not by the browser:
+Then add your Sepolia RPC URL and wallet private key to `.env`:
 
 ```env
 SEPOLIA_RPC_URL=https://ethereum-sepolia-rpc.publicnode.com
