@@ -95,12 +95,12 @@ npm install
 cp .env.example .env
 ```
 
-Set `WALLET_PRIVATE_KEY` for deployment. Set `CONTRACT_ADDRESS` to the deployed
+Set `WALLET_PRIVATE_KEY` for deployment. Set `VITE_CONTRACT_ADDRESS` to the deployed
 `MessageIntegrity` contract that the verifier should trust.
 
 ```env
 WALLET_PRIVATE_KEY=0xyour_private_key_here
-CONTRACT_ADDRESS=0x699a37c68c99DF26b179b98811F5d25597FBA816
+VITE_CONTRACT_ADDRESS=0x699a37c68c99DF26b179b98811F5d25597FBA816
 ```
 
 ### Compile
@@ -122,7 +122,7 @@ npm run test:web
 npm run deploy
 ```
 
-The deployed address is printed to stdout. Update `CONTRACT_ADDRESS`, this
+The deployed address is printed to stdout. Update `VITE_CONTRACT_ADDRESS`, this
 README, and the client integration.
 
 ---

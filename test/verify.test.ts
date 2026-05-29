@@ -4,7 +4,7 @@ import type { ProofPackage } from "../verification-page/src/types";
 
 const fetchSegmentRecordMock = vi.fn();
 const defaultContractAddress = "0x699a37c68c99DF26b179b98811F5d25597FBA816";
-const configuredContractAddress = import.meta.env.CONTRACT_ADDRESS;
+const configuredContractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
 const contractAddress = getAddress(
   typeof configuredContractAddress === "string" && configuredContractAddress.trim()
     ? configuredContractAddress.trim()

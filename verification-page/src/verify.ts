@@ -13,14 +13,14 @@ const SEPOLIA_CHAIN_NAME = "sepolia";
 const MAX_PROOF_PACKAGE_BYTES = 256 * 1024;
 
 function trustedContractAddress(): string {
-  const configuredAddress = import.meta.env.CONTRACT_ADDRESS;
+  const configuredAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
   const address =
     typeof configuredAddress === "string" && configuredAddress.trim()
       ? configuredAddress.trim()
       : DEFAULT_MESSAGE_INTEGRITY_ADDRESS;
 
   if (!ethers.isAddress(address)) {
-    throw new Error("CONTRACT_ADDRESS must be a valid Ethereum address");
+    throw new Error("VITE_CONTRACT_ADDRESS must be a valid Ethereum address");
   }
 
   return ethers.getAddress(address);
