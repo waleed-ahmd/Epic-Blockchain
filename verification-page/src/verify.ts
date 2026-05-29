@@ -1,11 +1,32 @@
 import { ethers } from "ethers";
-import { SEPOLIA_CHAIN_ID, fetchSegmentRecord } from "./blockchain";
+import { fetchSegmentRecord } from "./blockchain";
 import {
   canonicaliseEnvelope,
   computeEnvelopeHash,
   computeSegmentHashFromEnvelopeHashes,
 } from "./digest";
 import type { ProofPackage, VerificationOutput } from "./types";
+
+const DEFAULT_MESSAGE_INTEGRITY_ADDRESS = "0x699a37c68c99DF26b179b98811F5d25597FBA816";
+const SEPOLIA_CHAIN_ID = 11155111;
+const SEPOLIA_CHAIN_NAME = "sepolia";
+const MAX_PROOF_PACKAGE_BYTES = 256 * 1024;
+
+function trustedContractAddress(): string {
+  const configuredAddress = import.meta.env.CONTRACT_ADDRESS;
+  const address =
+    typeof configuredAddress === "string" && configuredAddress.trim()
+      ? configuredAddress.trim()
+      : DEFAULT_MESSAGE_INTEGRITY_ADDRESS;
+
+  if (!ethers.isAddress(address)) {
+    throw new Error("CONTRACT_ADDRESS must be a valid Ethereum address");
+  }
+
+  return ethers.getAddress(address);
+}
+
+export const TRUSTED_MESSAGE_INTEGRITY_ADDRESS = trustedContractAddress();
 
 function assertProofPackage(value: unknown): asserts value is ProofPackage {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
@@ -23,6 +44,10 @@ function assertProofPackage(value: unknown): asserts value is ProofPackage {
 }
 
 export function parseProofPackage(raw: string): ProofPackage {
+  if (new TextEncoder().encode(raw).length > MAX_PROOF_PACKAGE_BYTES) {
+    throw new Error("Proof package JSON is too large");
+  }
+
   if (!raw.trim()) {
     throw new Error("Proof package JSON is required");
   }
@@ -41,13 +66,15 @@ export function parseProofPackage(raw: string): ProofPackage {
 export async function verifyProofPackage(
   packageData: ProofPackage,
   rpcUrl: string,
-  contractAddressOverride: string,
 ): Promise<VerificationOutput> {
   const { envelope, proof } = packageData;
-  const contractAddress = contractAddressOverride.trim() || proof.contract_address;
 
-  if (!ethers.isAddress(contractAddress)) {
+  if (!ethers.isAddress(proof.contract_address)) {
     throw new Error("Proof contract address is missing or invalid");
+  }
+
+  if (ethers.getAddress(proof.contract_address) !== TRUSTED_MESSAGE_INTEGRITY_ADDRESS) {
+    throw new Error("Proof contract address does not match the trusted contract");
   }
 
   if (!ethers.isHexString(proof.segment_hash, 32)) {
@@ -58,8 +85,8 @@ export async function verifyProofPackage(
     throw new Error(`Proof chain_id must be Sepolia ${SEPOLIA_CHAIN_ID}`);
   }
 
-  if (proof.chain_name && proof.chain_name.toLowerCase() !== "sepolia") {
-    throw new Error("Proof chain_name must be sepolia");
+  if (proof.chain_name && proof.chain_name.toLowerCase() !== SEPOLIA_CHAIN_NAME) {
+    throw new Error(`Proof chain_name must be ${SEPOLIA_CHAIN_NAME}`);
   }
 
   if (
@@ -128,7 +155,11 @@ export async function verifyProofPackage(
     };
   }
 
-  const onChainRecord = await fetchSegmentRecord(rpcUrl, contractAddress, proof.segment_hash);
+  const onChainRecord = await fetchSegmentRecord(
+    rpcUrl,
+    TRUSTED_MESSAGE_INTEGRITY_ADDRESS,
+    proof.segment_hash,
+  );
   if (!onChainRecord.recorded) {
     return {
       ok: false,

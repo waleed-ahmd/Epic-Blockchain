@@ -5,7 +5,6 @@ const DIRECT_ENVELOPE_FIELDS: Array<keyof NormalisedEnvelope> = [
   "ciphertext",
   "conversation_id",
   "message_id",
-  "message_type",
   "ratchet_header_enc",
   "recipient_id",
   "schema_version",
@@ -13,7 +12,6 @@ const DIRECT_ENVELOPE_FIELDS: Array<keyof NormalisedEnvelope> = [
 ];
 
 const EXPECTED_SCHEMA_VERSION = "securemsg-envelope-v1";
-const EXPECTED_MESSAGE_TYPE = "direct";
 const SEGMENT_DIGEST_DOMAIN = "SecureMsgSegmentDigest:v1";
 const MAX_SEGMENT_ENVELOPES = 5;
 
@@ -40,7 +38,6 @@ export function normaliseEnvelope(envelope: Envelope): NormalisedEnvelope {
     ciphertext: envelope.ciphertext,
     conversation_id: envelope.conversation_id,
     message_id: idToString(envelope.message_id, "message_id"),
-    message_type: envelope.message_type,
     ratchet_header_enc: envelope.ratchet_header_enc,
     recipient_id: idToString(envelope.recipient_id, "recipient_id"),
     schema_version: envelope.schema_version,
@@ -49,10 +46,6 @@ export function normaliseEnvelope(envelope: Envelope): NormalisedEnvelope {
 
   if (normalised.schema_version !== EXPECTED_SCHEMA_VERSION) {
     throw new Error(`Invalid schema_version. Expected ${EXPECTED_SCHEMA_VERSION}`);
-  }
-
-  if (normalised.message_type !== EXPECTED_MESSAGE_TYPE) {
-    throw new Error(`Invalid message_type. Expected ${EXPECTED_MESSAGE_TYPE}`);
   }
 
   for (const field of DIRECT_ENVELOPE_FIELDS) {

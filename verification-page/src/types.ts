@@ -2,7 +2,6 @@ export type Envelope = {
   ciphertext: string;
   conversation_id: string;
   message_id: string | number;
-  message_type: string;
   ratchet_header_enc: string;
   recipient_id: string | number;
   schema_version: string;
@@ -13,7 +12,6 @@ export type NormalisedEnvelope = {
   ciphertext: string;
   conversation_id: string;
   message_id: string;
-  message_type: string;
   ratchet_header_enc: string;
   recipient_id: string;
   schema_version: string;

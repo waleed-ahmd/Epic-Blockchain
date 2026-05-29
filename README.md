@@ -29,8 +29,11 @@ The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.jso
 ## Web verifier
 
 The independent verification interface lives in `verification-page/` as a React
-and TypeScript app. It canonicalises encrypted envelopes, rebuilds the segment
-hash, and reads `getRecord(hash)` from the Sepolia contract.
+and TypeScript app. It is read-only: it canonicalises encrypted envelopes,
+rebuilds the segment hash, and reads `getRecord(hash)` from the Sepolia contract.
+The verifier only accepts proof packages for the trusted contract address
+configured in `.env`. The main client is responsible for calling `recordDigest`
+when a segment closes.
 
 Run it locally:
 
@@ -62,7 +65,7 @@ Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 tim
 
 ---
 
-### `getRecord(bytes32 hash) → (address recorder, uint256 timestamp)`
+### `getRecord(bytes32 hash) → (address recorder, uint64 timestamp)`
 
 Retrieves the on-chain record for a segment hash. Free to call (no gas) from off-chain. Returns `(address(0), 0)` if the hash has not been recorded.
 
@@ -90,7 +93,14 @@ npm install
 
 ```bash
 cp .env.example .env
-# Add your wallet private key to .env
+```
+
+Set `WALLET_PRIVATE_KEY` for deployment. Set `CONTRACT_ADDRESS` to the deployed
+`MessageIntegrity` contract that the verifier should trust.
+
+```env
+WALLET_PRIVATE_KEY=0xyour_private_key_here
+CONTRACT_ADDRESS=0x699a37c68c99DF26b179b98811F5d25597FBA816
 ```
 
 ### Compile
@@ -102,7 +112,8 @@ npx hardhat compile
 ### Test
 
 ```bash
-npx hardhat test
+npm test
+npm run test:web
 ```
 
 ### Deploy to Sepolia
@@ -111,7 +122,8 @@ npx hardhat test
 npm run deploy
 ```
 
-The deployed address is printed to stdout. Update the address in this README and in your client integration.
+The deployed address is printed to stdout. Update `CONTRACT_ADDRESS`, this
+README, and the client integration.
 
 ---
 
@@ -123,4 +135,4 @@ The deployed address is printed to stdout. Update the address in this README and
 
 **Signature verification** — the caller must sign the hash with the same key used to send the transaction, preventing third-party spoofing.
 
-**Event log** — `DigestRecorded` is emitted on every record alongside the `records` mapping, so the verification page can query by hash or filter by recorder address.
+**Event log** — `DigestRecorded` is emitted on every record alongside the `records` mapping for auditability.

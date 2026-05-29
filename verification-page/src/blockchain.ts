@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import type { OnChainRecord } from "./types";
 
-export const SEPOLIA_CHAIN_ID = 11155111;
+const SEPOLIA_CHAIN_ID = 11155111;
 export const DEFAULT_SEPOLIA_RPC_URL = "https://ethereum-sepolia-rpc.publicnode.com";
 
 const MESSAGE_INTEGRITY_ABI = [
@@ -17,6 +17,23 @@ const MESSAGE_INTEGRITY_ABI = [
   },
 ] as const;
 
+function normaliseRpcUrl(rpcUrl: string): string {
+  const candidate = rpcUrl.trim() || DEFAULT_SEPOLIA_RPC_URL;
+  let parsed: URL;
+
+  try {
+    parsed = new URL(candidate);
+  } catch {
+    throw new Error("RPC URL is invalid");
+  }
+
+  if (parsed.protocol !== "https:" ) {
+    throw new Error("RPC URL must use https");
+  }
+
+  return parsed.toString();
+}
+
 export async function fetchSegmentRecord(
   rpcUrl: string,
   contractAddress: string,
@@ -30,7 +47,7 @@ export async function fetchSegmentRecord(
     throw new Error("Segment hash must be a bytes32 hex string");
   }
 
-  const provider = new ethers.JsonRpcProvider(rpcUrl || DEFAULT_SEPOLIA_RPC_URL);
+  const provider = new ethers.JsonRpcProvider(normaliseRpcUrl(rpcUrl));
   const network = await provider.getNetwork();
 
   if (Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
