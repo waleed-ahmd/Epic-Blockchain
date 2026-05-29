@@ -26,9 +26,29 @@ The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.jso
 
 ---
 
+## Web verifier
+
+The independent verification interface lives in `verification-page/` as a React
+and TypeScript app. It canonicalises encrypted envelopes, rebuilds the segment
+hash, and reads `getRecord(hash)` from the Sepolia contract.
+
+Run it locally:
+
+```bash
+npm run dev
+```
+
+Build it:
+
+```bash
+npm run build
+```
+
+---
+
 ## Contract interface
 
-### `recordDigest(bytes32 hash, bytes signature, uint256 timestamp)`
+### `recordDigest(bytes32 hash, bytes signature, uint64 timestamp)`
 
 Records a segment hash on-chain.
 
@@ -38,7 +58,7 @@ Records a segment hash on-chain.
 | `signature` | EIP-191 signature of `hash` produced by the caller's private key                                   |
 | `timestamp` | Unix timestamp (seconds) of when the segment was recorded — must be non-zero and not in the future |
 
-Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint256 timestamp)`.
+Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 timestamp)`.
 
 ---
 
