@@ -34,7 +34,7 @@ contract MessageIntegrity {
      * @notice Records the hash of 5 messages. The caller must have signed the hash.
      * @param hash    keccak256 hash of 5 messages.
      * @param signature EIP-191 signature of hash produced by msg.sender's key.
-     * @param timestamp Unix timestamp (seconds) when the 5 messages hash was recorded.
+     * @param timestamp Unix timestamp (seconds) when the conversation segment was recorded.
      */
     function recordDigest(bytes32 hash, bytes calldata signature, uint64 timestamp) external {
         if (hash == bytes32(0)) revert EmptyHash();
@@ -51,8 +51,8 @@ contract MessageIntegrity {
     }
 
     /**
-     * @notice Retrieve the on-chain record for a given 5 messages hash.
-     * @param hash keccak256 hash of the 5 messages.
+     * @notice Retrieve the on-chain record for a given segment hash.
+     * @param hash keccak256 hash of the conversation segment.
      * @return recorder  The address that submitted this hash.
      * @return timestamp The block timestamp when it was recorded (0 if not found).
      */

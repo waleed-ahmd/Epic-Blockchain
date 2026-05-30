@@ -21,7 +21,7 @@ export function getTrustedMessageIntegrityAddress(): string {
 
 function assertMessageArray(value: unknown): asserts value is MessageForVerification[] {
   if (!Array.isArray(value)) {
-    throw new Error("Message batch must be an array of messages");
+    throw new Error("Message batch must contain a messages array");
   }
 }
 
@@ -36,19 +36,21 @@ function normaliseBatchInput(value: unknown): MessageBatchInput {
 
   const batch = value as Partial<MessageBatchInput>;
   assertMessageArray(batch.messages);
+
   return { messages: batch.messages };
 }
 
 export function parseMessageBatch(raw: string): MessageBatchInput {
-  if (new TextEncoder().encode(raw).length > MAX_MESSAGE_BATCH_BYTES) {
-    throw new Error("Message batch JSON is too large");
-  }
-
   if (!raw.trim()) {
     throw new Error("Message batch JSON is required");
   }
 
+  if (new TextEncoder().encode(raw).length > MAX_MESSAGE_BATCH_BYTES) {
+    throw new Error("Message batch JSON is too large");
+  }
+
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
@@ -62,25 +64,26 @@ export async function verifyMessageBatch(
   batch: MessageBatchInput,
   rpcUrl: string,
 ): Promise<VerificationOutput> {
-  const messagesHash = computeMessagesHashFromMessages(batch.messages);
+  const computedMessagesHash = computeMessagesHashFromMessages(batch.messages);
+
   const onChainRecord = await fetchMessagesHashRecord(
     rpcUrl,
     getTrustedMessageIntegrityAddress(),
-    messagesHash,
+    computedMessagesHash,
   );
 
   if (!onChainRecord) {
     return {
       ok: false,
       statusMessage: "Message batch hash has not been recorded on Sepolia",
-      computedMessagesHash: messagesHash,
+      computedMessagesHash,
     };
   }
 
   return {
     ok: true,
     statusMessage: "Message batch is valid and matches the Sepolia record",
-    computedMessagesHash: messagesHash,
+    computedMessagesHash,
     onChainRecord,
   };
 }
