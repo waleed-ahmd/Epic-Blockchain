@@ -3,9 +3,6 @@ name: CI
 on:
   workflow_dispatch:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
 
 jobs:
   ci:
@@ -21,16 +18,19 @@ jobs:
       - run: npm ci
 
       - name: Compile contracts
-        run: npx hardhat compile
+        run: npm run compile
 
       - name: Type check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Run tests
+        run: npm test
+
+      - name: Build verification web app
+        run: npm run build
 
       - name: Validate ABI
         run: node -e "JSON.parse(require('fs').readFileSync('abi/contracts/MessageIntegrity.sol/MessageIntegrity.json', 'utf8')).abi"
-
-      - name: Run tests
-        run: npx hardhat test
 
       - name: Audit dependencies
         run: npm audit --audit-level=low
