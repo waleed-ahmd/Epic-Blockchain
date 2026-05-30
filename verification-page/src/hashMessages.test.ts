@@ -42,7 +42,7 @@ describe("message batch hashing", () => {
   });
 
   it("rejects invalid batches", () => {
-    expect(() => computeMessagesHashFromMessages([])).to.throw("At least one message is required");
+    expect(() => computeMessagesHashFromMessages([])).to.throw("messages array cannot be empty");
     expect(() => computeMessagesHashFromMessages([firstMessage, firstMessage])).to.throw(
       "index values must be unique within a batch",
     );
