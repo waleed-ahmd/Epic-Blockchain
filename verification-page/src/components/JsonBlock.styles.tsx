@@ -1,5 +1,6 @@
-const css = `
-.json-block {
+import styled from "styled-components";
+
+export const JsonPre = styled.pre`
   overflow: auto;
   margin: 0;
   max-height: 18rem;
@@ -9,9 +10,4 @@ const css = `
   color: #cbd5e1;
   font-size: 0.86rem;
   line-height: 1.45;
-}
 `;
-
-export function JsonBlockStyles() {
-  return <style>{css}</style>;
-}

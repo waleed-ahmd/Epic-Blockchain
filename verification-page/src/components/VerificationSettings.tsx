@@ -1,4 +1,10 @@
-import { VerificationSettingsStyles } from "./VerificationSettings.styles";
+import {
+  RpcInput,
+  SettingsContainer,
+  SettingsGrid,
+  SettingsLabel,
+  SettingsSummary,
+} from "./VerificationSettings.styles";
 
 type VerificationSettingsProps = {
   rpcUrl: string;
@@ -7,15 +13,14 @@ type VerificationSettingsProps = {
 
 export function VerificationSettings({ rpcUrl, onRpcUrlChange }: VerificationSettingsProps) {
   return (
-    <details className="settings">
-      <VerificationSettingsStyles />
-      <summary>Verification settings</summary>
-      <div className="settings-grid">
-        <label>
+    <SettingsContainer>
+      <SettingsSummary>Verification settings</SettingsSummary>
+      <SettingsGrid>
+        <SettingsLabel>
           RPC URL
-          <input value={rpcUrl} onChange={(event) => onRpcUrlChange(event.target.value)} />
-        </label>
-      </div>
-    </details>
+          <RpcInput value={rpcUrl} onChange={(event) => onRpcUrlChange(event.target.value)} />
+        </SettingsLabel>
+      </SettingsGrid>
+    </SettingsContainer>
   );
 }

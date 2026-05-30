@@ -1,6 +1,15 @@
 import { useState } from "react";
 import { DEFAULT_SEPOLIA_RPC_URL } from "./blockchain";
-import { AppStyles } from "./App.styles";
+import {
+  AppContainer,
+  AppShell,
+  GlobalStyles,
+  NetworkPill,
+  PageDescription,
+  PageHeading,
+  PageTitle,
+  Workspace,
+} from "./App.styles";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { MessageBatchPanel } from "./components/MessageBatchPanel";
@@ -44,22 +53,24 @@ export default function App() {
   }
 
   return (
-    <main className="app">
-      <AppStyles />
+    <AppContainer>
+      <GlobalStyles />
       <Header status={status} result={result} />
 
-      <div className="app-shell">
-        <section className="page-title">
+      <AppShell>
+        <PageTitle>
           <div>
-            <h1>Verify message batch</h1>
-            <p>Paste received messages to rebuild the messages_hash after sorting by index.</p>
+            <PageHeading>Verify message batch</PageHeading>
+            <PageDescription>
+              Paste received messages to rebuild the messages_hash after sorting by index.
+            </PageDescription>
           </div>
-          <span className="network-pill">Sepolia</span>
-        </section>
+          <NetworkPill>Sepolia</NetworkPill>
+        </PageTitle>
 
         <VerificationSettings rpcUrl={rpcUrl} onRpcUrlChange={setRpcUrl} />
 
-        <section className="workspace">
+        <Workspace>
           <MessageBatchPanel
             batchJson={batchJson}
             busy={busy}
@@ -68,10 +79,10 @@ export default function App() {
             onClear={clearForm}
           />
           <VerificationResultPanel result={result} />
-        </section>
-      </div>
+        </Workspace>
+      </AppShell>
 
       <Footer />
-    </main>
+    </AppContainer>
   );
 }

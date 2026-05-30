@@ -1,40 +1,68 @@
-import type { VerificationOutput } from "../types";
+import type { JsonValue, VerificationOutput } from "../types";
 import { JsonBlock } from "./JsonBlock";
-import { VerificationResultPanelStyles } from "./VerificationResultPanel.styles";
+import {
+  OutputLabel,
+  OutputSection,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  ResultMessage,
+  ResultPanel,
+  ResultStack,
+} from "./VerificationResultPanel.styles";
 
 const OUTPUT_SECTIONS: Array<{
   label: string;
-  getValue: (result: VerificationOutput | undefined) => unknown;
+  getValue: (result?: VerificationOutput) => JsonValue | undefined;
 }> = [
   { label: "Messages hash", getValue: (result) => result?.computedMessagesHash },
-  { label: "On-chain record", getValue: (result) => result?.onChainRecord },
+  {
+    label: "On-chain record",
+    getValue: (result) =>
+      result?.onChainRecord
+        ? {
+            messages_hash: result.onChainRecord.messages_hash,
+            recorder: result.onChainRecord.recorder,
+            timestamp: result.onChainRecord.timestamp,
+          }
+        : undefined,
+  },
 ];
 
 type VerificationResultPanelProps = {
   result?: VerificationOutput;
 };
 
+function getResultState(result?: VerificationOutput) {
+  if (!result) {
+    return "idle";
+  }
+
+  return result.ok ? "pass" : "fail";
+}
+
 export function VerificationResultPanel({ result }: VerificationResultPanelProps) {
   return (
-    <section className="panel result-panel">
-      <VerificationResultPanelStyles />
-      <div className="panel-header">
+    <ResultPanel>
+      <PanelHeader>
         <div>
-          <h2>Verification result</h2>
-          <p>The local messages_hash is compared with the Sepolia record.</p>
+          <PanelTitle>Verification result</PanelTitle>
+          <PanelDescription>
+            The local messages_hash is compared with the Sepolia record.
+          </PanelDescription>
         </div>
-      </div>
-      <div className={`result ${result?.ok ? "pass" : result ? "fail" : ""}`}>
+      </PanelHeader>
+      <ResultMessage $state={getResultState(result)}>
         {result?.statusMessage || "Waiting for message batch."}
-      </div>
-      <div className="result-stack">
+      </ResultMessage>
+      <ResultStack>
         {OUTPUT_SECTIONS.map((section) => (
-          <section key={section.label}>
-            <h3>{section.label}</h3>
+          <OutputSection key={section.label}>
+            <OutputLabel>{section.label}</OutputLabel>
             <JsonBlock value={section.getValue(result)} />
-          </section>
+          </OutputSection>
         ))}
-      </div>
-    </section>
+      </ResultStack>
+    </ResultPanel>
   );
 }

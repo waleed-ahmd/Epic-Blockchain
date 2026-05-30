@@ -1,4 +1,13 @@
-import { MessageBatchPanelStyles } from "./MessageBatchPanel.styles";
+import {
+  ActionRow,
+  BatchPanel,
+  BatchTextArea,
+  PanelDescription,
+  PanelHeader,
+  PanelTitle,
+  PrimaryButton,
+  SecondaryButton,
+} from "./MessageBatchPanel.styles";
 
 type MessageBatchPanelProps = {
   batchJson: string;
@@ -16,28 +25,29 @@ export function MessageBatchPanel({
   onClear,
 }: MessageBatchPanelProps) {
   return (
-    <section className="panel batch-panel">
-      <MessageBatchPanelStyles />
-      <div className="panel-header">
+    <BatchPanel>
+      <PanelHeader>
         <div>
-          <h2>Message batch</h2>
-          <p>Use messages with index, sender_public_key, and ciphertext.</p>
+          <PanelTitle>Message batch</PanelTitle>
+          <PanelDescription>
+            Use message index, sender_public_key, and ciphertext.
+          </PanelDescription>
         </div>
-      </div>
-      <textarea
+      </PanelHeader>
+      <BatchTextArea
         value={batchJson}
         onChange={(event) => onBatchJsonChange(event.target.value)}
         placeholder='{"messages":[{"index":0,"sender_public_key":"...","ciphertext":"..."}]}'
         spellCheck={false}
       />
-      <div className="actions">
-        <button type="button" onClick={onVerify} disabled={busy}>
+      <ActionRow>
+        <PrimaryButton type="button" onClick={onVerify} disabled={busy}>
           {busy ? "Verifying..." : "Verify"}
-        </button>
-        <button type="button" onClick={onClear}>
+        </PrimaryButton>
+        <SecondaryButton type="button" onClick={onClear}>
           Clear
-        </button>
-      </div>
-    </section>
+        </SecondaryButton>
+      </ActionRow>
+    </BatchPanel>
   );
 }

@@ -1,23 +1,30 @@
 import type { VerificationOutput } from "../types";
-import { HeaderStyles } from "./Header.styles";
+import { Brand, BrandMark, BrandText, StatusBadge, Topbar } from "./Header.styles";
 
 type HeaderProps = {
   status: string;
   result?: VerificationOutput;
 };
 
+function getStatusState(result?: VerificationOutput) {
+  if (!result) {
+    return "idle";
+  }
+
+  return result.ok ? "pass" : "fail";
+}
+
 export function Header({ status, result }: HeaderProps) {
   return (
-    <header className="topbar">
-      <HeaderStyles />
-      <div className="brand">
-        <div className="brand-mark">S</div>
-        <div>
+    <Topbar>
+      <Brand>
+        <BrandMark>S</BrandMark>
+        <BrandText>
           <strong>SecureMsg Verification</strong>
           <span>Sepolia integrity check</span>
-        </div>
-      </div>
-      <div className={`status ${result?.ok ? "pass" : result ? "fail" : ""}`}>{status}</div>
-    </header>
+        </BrandText>
+      </Brand>
+      <StatusBadge $state={getStatusState(result)}>{status}</StatusBadge>
+    </Topbar>
   );
 }

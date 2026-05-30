@@ -1,14 +1,19 @@
-import { FooterStyles } from "./Footer.styles";
+import {
+  FooterBrand,
+  FooterContainer,
+  FooterNetwork,
+  FooterSubtitle,
+  FooterTitle,
+} from "./Footer.styles";
 
 export function Footer() {
   return (
-    <footer className="app-footer">
-      <FooterStyles />
-      <div>
-        <strong>SecureMsg</strong>
-        <span>Read-only blockchain integrity verifier</span>
-      </div>
-      <span>Network: Sepolia</span>
-    </footer>
+    <FooterContainer>
+      <FooterBrand>
+        <FooterTitle>SecureMsg</FooterTitle>
+        <FooterSubtitle>Blockchain integrity verifier</FooterSubtitle>
+      </FooterBrand>
+      <FooterNetwork>Network: Sepolia</FooterNetwork>
+    </FooterContainer>
   );
 }

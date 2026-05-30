@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
 import { fetchMessagesHashRecord } from "./blockchain";
 import { computeMessagesHashFromMessages } from "./hashMessages";
-import type { MessageBatchInput, MessageForVerification, VerificationOutput } from "./types";
+import type { JsonValue, MessageBatchInput, MessageForVerification, VerificationOutput } from "./types";
 
 const MAX_MESSAGE_BATCH_BYTES = 256 * 1024;
 
@@ -19,25 +19,25 @@ export function getTrustedMessageIntegrityAddress(): string {
   return ethers.getAddress(configuredAddress);
 }
 
-function assertMessageArray(value: unknown): asserts value is MessageForVerification[] {
+function assertMessageArray(value: JsonValue | undefined): asserts value is MessageForVerification[] {
   if (!Array.isArray(value)) {
     throw new Error("Message batch must contain a messages array");
   }
 }
 
-function normaliseBatchInput(value: unknown): MessageBatchInput {
+function normaliseBatchInput(value: JsonValue): MessageBatchInput {
   if (Array.isArray(value)) {
-    return { messages: value };
+    return { messages: value as MessageForVerification[] };
   }
 
   if (!value || typeof value !== "object") {
     throw new Error("Message batch must be a JSON object or array");
   }
 
-  const batch = value as Partial<MessageBatchInput>;
-  assertMessageArray(batch.messages);
+  const messages = (value as { messages?: JsonValue }).messages;
+  assertMessageArray(messages);
 
-  return { messages: batch.messages };
+  return { messages };
 }
 
 export function parseMessageBatch(raw: string): MessageBatchInput {
@@ -49,10 +49,10 @@ export function parseMessageBatch(raw: string): MessageBatchInput {
     throw new Error("Message batch JSON is too large");
   }
 
-  let parsed: unknown;
+  let parsed: JsonValue;
 
   try {
-    parsed = JSON.parse(raw);
+    parsed = JSON.parse(raw) as JsonValue;
   } catch {
     throw new Error("Invalid JSON. Please provide a valid message batch.");
   }

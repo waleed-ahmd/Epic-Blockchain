@@ -10,13 +10,16 @@ type CanonicalMessage = {
   ciphertext: string;
 };
 
-function requireNonEmptyString(value: unknown, fieldName: string): asserts value is string {
+function requireNonEmptyString(
+  value: string | undefined,
+  fieldName: string,
+): asserts value is string {
   if (typeof value !== "string" || value.trim().length === 0) {
     throw new Error(`${fieldName} must be a non-empty string`);
   }
 }
 
-function normaliseIndex(value: unknown): number {
+function normaliseIndex(value: number | undefined): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error("index must be a non-negative integer");
   }
@@ -24,21 +27,19 @@ function normaliseIndex(value: unknown): number {
   return value;
 }
 
-function normaliseMessage(message: MessageForVerification): CanonicalMessage {
+function normaliseMessage(message: Partial<MessageForVerification>): CanonicalMessage {
   if (!message || typeof message !== "object" || Array.isArray(message)) {
     throw new Error("Message must be a JSON object");
   }
 
-  const normalised: CanonicalMessage = {
+  requireNonEmptyString(message.sender_public_key, "sender_public_key");
+  requireNonEmptyString(message.ciphertext, "ciphertext");
+
+  return {
     index: normaliseIndex(message.index),
     sender_public_key: message.sender_public_key,
     ciphertext: message.ciphertext,
   };
-
-  requireNonEmptyString(normalised.sender_public_key, "sender_public_key");
-  requireNonEmptyString(normalised.ciphertext, "ciphertext");
-
-  return normalised;
 }
 
 export function canonicaliseMessagesForHash(
