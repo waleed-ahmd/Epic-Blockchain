@@ -1,13 +1,15 @@
 import type { VerificationOutput } from "../types";
+import { HeaderStyles } from "./Header.styles";
 
 type HeaderProps = {
   status: string;
-  result: VerificationOutput | null;
+  result?: VerificationOutput;
 };
 
 export function Header({ status, result }: HeaderProps) {
   return (
     <header className="topbar">
+      <HeaderStyles />
       <div className="brand">
         <div className="brand-mark">S</div>
         <div>

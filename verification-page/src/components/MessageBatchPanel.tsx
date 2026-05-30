@@ -1,3 +1,5 @@
+import { MessageBatchPanelStyles } from "./MessageBatchPanel.styles";
+
 type MessageBatchPanelProps = {
   batchJson: string;
   busy: boolean;
@@ -15,16 +17,17 @@ export function MessageBatchPanel({
 }: MessageBatchPanelProps) {
   return (
     <section className="panel batch-panel">
+      <MessageBatchPanelStyles />
       <div className="panel-header">
         <div>
           <h2>Message batch</h2>
-          <p>Use messages with message_id, sender_public_key, and ciphertext.</p>
+          <p>Use messages with index, sender_public_key, and ciphertext.</p>
         </div>
       </div>
       <textarea
         value={batchJson}
         onChange={(event) => onBatchJsonChange(event.target.value)}
-        placeholder='{"messages":[{"message_id":1,"sender_public_key":"...","ciphertext":"..."}]}'
+        placeholder='{"messages":[{"index":0,"sender_public_key":"...","ciphertext":"..."}]}'
         spellCheck={false}
       />
       <div className="actions">

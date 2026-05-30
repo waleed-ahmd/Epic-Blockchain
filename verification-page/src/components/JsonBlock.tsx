@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { JsonBlockStyles } from "./JsonBlock.styles";
 
 type JsonBlockProps = {
   value: unknown;
@@ -6,12 +7,17 @@ type JsonBlockProps = {
 
 export function JsonBlock({ value }: JsonBlockProps) {
   const text = useMemo(() => {
-    if (!value) {
+    if (value === undefined) {
       return "Not available.";
     }
 
     return typeof value === "string" ? value : JSON.stringify(value, null, 2);
   }, [value]);
 
-  return <pre>{text}</pre>;
+  return (
+    <pre className="json-block">
+      <JsonBlockStyles />
+      {text}
+    </pre>
+  );
 }

@@ -1,27 +1,27 @@
 import type { VerificationOutput } from "../types";
 import { JsonBlock } from "./JsonBlock";
+import { VerificationResultPanelStyles } from "./VerificationResultPanel.styles";
 
 const OUTPUT_SECTIONS: Array<{
   label: string;
-  getValue: (result: VerificationOutput | null) => unknown;
+  getValue: (result: VerificationOutput | undefined) => unknown;
 }> = [
-  { label: "Message hashes", getValue: (result) => result?.computedMessageHashes },
   { label: "Messages hash", getValue: (result) => result?.computedMessagesHash },
   { label: "On-chain record", getValue: (result) => result?.onChainRecord },
-  { label: "Canonical messages", getValue: (result) => result?.canonicalMessages },
 ];
 
 type VerificationResultPanelProps = {
-  result: VerificationOutput | null;
+  result?: VerificationOutput;
 };
 
 export function VerificationResultPanel({ result }: VerificationResultPanelProps) {
   return (
     <section className="panel result-panel">
+      <VerificationResultPanelStyles />
       <div className="panel-header">
         <div>
           <h2>Verification result</h2>
-          <p>The local hash is compared with the Sepolia record.</p>
+          <p>The local messages_hash is compared with the Sepolia record.</p>
         </div>
       </div>
       <div className={`result ${result?.ok ? "pass" : result ? "fail" : ""}`}>

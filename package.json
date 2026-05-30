@@ -7,7 +7,7 @@
     "build": "vite build",
     "compile": "hardhat compile",
     "typecheck": "tsc --noEmit",
-    "test": "hardhat test test/MessageIntegrity.test.ts && vitest run --root . test/hashMessages.test.ts test/verify.test.ts",
+    "test": "hardhat test && vitest run",
     "deploy": "HARDHAT_NETWORK=sepolia hardhat run scripts/deploy.ts"
   },
   "devDependencies": {

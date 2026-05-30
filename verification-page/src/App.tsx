@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { DEFAULT_SEPOLIA_RPC_URL } from "./blockchain";
+import { AppStyles } from "./App.styles";
 import { Footer } from "./components/Footer";
 import { Header } from "./components/Header";
 import { MessageBatchPanel } from "./components/MessageBatchPanel";
-import { VerificationPageStyles } from "./components/VerificationPage.styles";
 import { VerificationResultPanel } from "./components/VerificationResultPanel";
 import { VerificationSettings } from "./components/VerificationSettings";
 import { parseMessageBatch, verifyMessageBatch } from "./verify";
@@ -12,14 +12,14 @@ import type { VerificationOutput } from "./types";
 export default function App() {
   const [batchJson, setBatchJson] = useState("");
   const [rpcUrl, setRpcUrl] = useState(DEFAULT_SEPOLIA_RPC_URL);
-  const [result, setResult] = useState<VerificationOutput | null>(null);
+  const [result, setResult] = useState<VerificationOutput | undefined>();
   const [status, setStatus] = useState("Not verified yet.");
   const [busy, setBusy] = useState(false);
 
   async function onVerify() {
     setBusy(true);
     setStatus("Verifying...");
-    setResult(null);
+    setResult(undefined);
 
     try {
       const batch = parseMessageBatch(batchJson);
@@ -39,22 +39,20 @@ export default function App() {
 
   function clearForm() {
     setBatchJson("");
-    setResult(null);
+    setResult(undefined);
     setStatus("Not verified yet.");
   }
 
   return (
     <main className="app">
-      <VerificationPageStyles />
+      <AppStyles />
       <Header status={status} result={result} />
 
       <div className="app-shell">
         <section className="page-title">
           <div>
             <h1>Verify message batch</h1>
-            <p>
-              Paste received messages to rebuild the messages_hash after sorting by message_id.
-            </p>
+            <p>Paste received messages to rebuild the messages_hash after sorting by index.</p>
           </div>
           <span className="network-pill">Sepolia</span>
         </section>

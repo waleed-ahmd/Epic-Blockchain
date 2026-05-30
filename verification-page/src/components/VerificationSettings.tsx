@@ -1,3 +1,5 @@
+import { VerificationSettingsStyles } from "./VerificationSettings.styles";
+
 type VerificationSettingsProps = {
   rpcUrl: string;
   onRpcUrlChange: (value: string) => void;
@@ -6,6 +8,7 @@ type VerificationSettingsProps = {
 export function VerificationSettings({ rpcUrl, onRpcUrlChange }: VerificationSettingsProps) {
   return (
     <details className="settings">
+      <VerificationSettingsStyles />
       <summary>Verification settings</summary>
       <div className="settings-grid">
         <label>

@@ -1,11 +1,6 @@
 export type MessageForVerification = {
-  /** Used only to sort the batch in ascending order before hashing. */
-  message_id: number;
-
-  /** Binds the encrypted message to the sender key without relying on a mutable display name. */
+  index: number;
   sender_public_key: string;
-
-  /** The encrypted message content committed into the batch hash. */
   ciphertext: string;
 };
 
@@ -19,21 +14,9 @@ export type OnChainRecord = {
   timestamp: number;
 };
 
-type VerificationBase = {
+export type VerificationOutput = {
+  ok: boolean;
   statusMessage: string;
-  canonicalMessages?: string[];
-  computedMessageHashes?: string[];
   computedMessagesHash?: string;
+  onChainRecord?: OnChainRecord;
 };
-
-export type VerificationSuccess = VerificationBase & {
-  ok: true;
-  onChainRecord: OnChainRecord;
-};
-
-export type VerificationFailure = VerificationBase & {
-  ok: false;
-  onChainRecord?: never;
-};
-
-export type VerificationOutput = VerificationSuccess | VerificationFailure;

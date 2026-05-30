@@ -3,24 +3,21 @@ import { fetchMessagesHashRecord } from "./blockchain";
 import { computeMessagesHashFromMessages } from "./hashMessages";
 import type { MessageBatchInput, MessageForVerification, VerificationOutput } from "./types";
 
-const DEFAULT_MESSAGE_INTEGRITY_ADDRESS = "0x699a37c68c99DF26b179b98811F5d25597FBA816";
 const MAX_MESSAGE_BATCH_BYTES = 256 * 1024;
 
-function trustedContractAddress(): string {
+export function getTrustedMessageIntegrityAddress(): string {
   const configuredAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
-  const address =
-    typeof configuredAddress === "string" && configuredAddress.trim()
-      ? configuredAddress.trim()
-      : DEFAULT_MESSAGE_INTEGRITY_ADDRESS;
 
-  if (!ethers.isAddress(address)) {
+  if (typeof configuredAddress !== "string" || configuredAddress.trim().length === 0) {
+    throw new Error("VITE_CONTRACT_ADDRESS is required");
+  }
+
+  if (!ethers.isAddress(configuredAddress)) {
     throw new Error("VITE_CONTRACT_ADDRESS must be a valid Ethereum address");
   }
 
-  return ethers.getAddress(address);
+  return ethers.getAddress(configuredAddress);
 }
-
-export const TRUSTED_MESSAGE_INTEGRITY_ADDRESS = trustedContractAddress();
 
 function assertMessageArray(value: unknown): asserts value is MessageForVerification[] {
   if (!Array.isArray(value)) {
@@ -65,12 +62,10 @@ export async function verifyMessageBatch(
   batch: MessageBatchInput,
   rpcUrl: string,
 ): Promise<VerificationOutput> {
-  const { canonicalMessages, messageHashes, messagesHash } = computeMessagesHashFromMessages(
-    batch.messages,
-  );
+  const messagesHash = computeMessagesHashFromMessages(batch.messages);
   const onChainRecord = await fetchMessagesHashRecord(
     rpcUrl,
-    TRUSTED_MESSAGE_INTEGRITY_ADDRESS,
+    getTrustedMessageIntegrityAddress(),
     messagesHash,
   );
 
@@ -78,8 +73,6 @@ export async function verifyMessageBatch(
     return {
       ok: false,
       statusMessage: "Message batch hash has not been recorded on Sepolia",
-      canonicalMessages,
-      computedMessageHashes: messageHashes,
       computedMessagesHash: messagesHash,
     };
   }
@@ -87,8 +80,6 @@ export async function verifyMessageBatch(
   return {
     ok: true,
     statusMessage: "Message batch is valid and matches the Sepolia record",
-    canonicalMessages,
-    computedMessageHashes: messageHashes,
     computedMessagesHash: messagesHash,
     onChainRecord,
   };
