@@ -1,6 +1,13 @@
-# Remix compiler artifacts
+# Hardhat/compiler output
 **/artifacts/
 **/artifacts/**
+cache/
+typechain-types/
+dist/
+
+# Generated ABI build noise — keep only the contract JSON
+abi/build-info/
+abi/**/*.d.ts
 
 # Remix plugin state folders
 deps/
@@ -9,11 +16,10 @@ states/
 # Debug info
 *.dbg.json
 *.tsbuildinfo
-dist/
 
 # Optional
 .env
 .env.local
-
-# Local browser configuration with RPC URLs / deployed addresses
-config.js
+.idea
+docs
+node_modules

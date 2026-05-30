@@ -1,162 +1,106 @@
-# Epic Blockchain
+# SecureMsg Message Integrity Contract
 
-SecureMsg blockchain integrity verification for encrypted message envelopes.
+A Solidity smart contract that records keccak256 hashes of SecureMsg conversation segments on-chain, providing tamper-evident proof of the messages.
 
-This project records Merkle roots for small batches of encrypted messages on the
-Sepolia Ethereum test network, then verifies a client-held proof package against
-the deployed smart contract.
+## What it does
 
-## What This Project Does
+5 messages are batched up into a segment then the client:
 
-- Hashes a canonical encrypted message envelope with `keccak256`.
-- Verifies that the envelope belongs to a Merkle-rooted message segment.
-- Reads the recorded segment root from a Sepolia `MessageIntegrity` contract.
-- Confirms that the local proof package matches the on-chain record.
-- Stores only segment roots and references on-chain, not plaintext or ciphertext.
+1. Computes a keccak256 hash of the segments
+2. Signs the hash with their wallet private key
+3. Calls `recordDigest` on the contract, submitting the hash, signature, and the timestamp of when the segment was recorded
 
-## Project Structure
+The contract verifies the signature matches the caller, stores the record on-chain, and emits a `DigestRecorded` event. The transaction hash from the receipt is stored client-side for later verification.
 
-```text
-contracts/MessageIntegrity.sol        Smart contract for storing segment roots
-verification-page/verification.html   Browser verification page
-verification-page/verification.css    Verification page styling
-verification-page/verification.js     Proof package verification logic
-verification-page/merkleUtils.js      Envelope hashing and Merkle proof helpers
-verification-page/blockchainClient.js Sepolia contract read/write helper
-config.example.js                     Safe config template committed to Git
-config.js                             Local config ignored by Git
-package.json                          Build and local server scripts
-scripts/build.js                      Creates the dist build output
-scripts/serve.js                      Serves source or built files locally
-```
+To verify a segment later, anyone can call `getRecord(hash)` with the segment hash and receive the recorder address and timestamp — no third party needed.
 
-## Local Configuration
+---
 
-Copy the example config and create a local config file:
+## Deployed contract
 
-```bash
-cp config.example.js config.js
-```
+| Network | Address                                      |
+|---------|----------------------------------------------|
+| Sepolia | `0x699a37c68c99DF26b179b98811F5d25597FBA816` |
 
-Then edit `config.js`:
+The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.json` after running `npx hardhat compile`.
 
-```js
-window.SecureMsgConfig = {
-  sepoliaChainIdDecimal: 11155111,
-  sepoliaChainIdHex: "0xaa36a7",
-  sepoliaReadRpcUrl: "https://eth-sepolia.g.alchemy.com/v2/YOUR_KEY",
-  expectedContractAddress: "0xYourDeployedMessageIntegrityContractAddress",
-  allowedContractAddresses: []
-};
-```
+---
 
-`config.js` is ignored by Git, so RPC URLs and deployment-specific addresses are
-not committed.
+## Contract interface
 
-`expectedContractAddress` is required for production-style verification. The
-verification page rejects proof packages that point at any other contract.
+### `recordDigest(bytes32 hash, bytes signature, uint256 timestamp)`
 
-## Development Server
+Records a segment hash on-chain.
 
-Start a local server:
+| Parameter   | Description                                                                                        |
+|-------------|----------------------------------------------------------------------------------------------------|
+| `hash`      | keccak256 hash of the conversation segment                                                         |
+| `signature` | EIP-191 signature of `hash` produced by the caller's private key                                   |
+| `timestamp` | Unix timestamp (seconds) of when the segment was recorded — must be non-zero and not in the future |
 
-```bash
-npm run dev
-```
+Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint256 timestamp)`.
 
-Then open:
+---
 
-```text
-http://localhost:4173/verification-page/verification.html
-```
+### `getRecord(bytes32 hash) → (address recorder, uint256 timestamp)`
 
-Paste or upload a proof package, then click **Verify Proof Package**.
+Retrieves the on-chain record for a segment hash. Free to call (no gas) from off-chain. Returns `(address(0), 0)` if the hash has not been recorded.
 
-The page checks:
+| Return value | Description                            |
+|--------------|----------------------------------------|
+| `recorder`   | Wallet address that submitted the hash |
+| `timestamp`  | Unix timestamp provided at record time |
 
-- The envelope can be canonicalised and hashed.
-- The optional proof leaf hash matches the computed envelope hash.
-- The Merkle proof rebuilds the package segment root.
-- The segment root matches the Sepolia record.
-- The proof contract address matches the trusted address in `config.js`.
-- The conversation and segment references match when present.
+---
 
-## Build And Preview
+## Setup
 
-Create a static build:
+### Prerequisites
+
+- Node.js 22+
+- A Sepolia wallet with test ETH ([faucet](https://sepoliafaucet.com))
+
+### Install
 
 ```bash
-npm run build
+npm install
 ```
 
-This writes the browser files to `dist/`. The build copies your local
-`config.js` into `dist/config.js` if it exists, so `dist/` is ignored by Git.
-
-Preview the built output:
+### Configure
 
 ```bash
-npm run preview
+cp .env.example .env
+# Add your wallet private key to .env
 ```
 
-Then open:
+### Compile
 
-```text
-http://localhost:4173/verification-page/verification.html
+```bash
+npx hardhat compile
 ```
 
-## Proof Package Format
+### Test
 
-```json
-{
-  "envelope": {
-    "schema_version": "securemsg-envelope-v1",
-    "message_type": "direct",
-    "conversation_id": "direct-1-2",
-    "message_id": "1",
-    "sender_id": "1",
-    "recipient_id": "2",
-    "ciphertext": "<base64>",
-    "ratchet_header_enc": "<base64>"
-  },
-  "proof": {
-    "segment_id": "direct-1-2-local-seg-1",
-    "segment_index": 0,
-    "record_id": 1,
-    "transaction_hash": "0x...",
-    "contract_address": "0x...",
-    "chain_name": "sepolia",
-    "chain_id": 11155111,
-    "segment_root": "0x...",
-    "leaf_hash": "0x...",
-    "merkle_proof": [
-      {
-        "siblingHash": "0x...",
-        "position": "right"
-      }
-    ]
-  }
-}
+```bash
+npx hardhat test
 ```
 
-## Smart Contract
+### Deploy to Sepolia
 
-`contracts/MessageIntegrity.sol` stores one record per message segment:
+```bash
+npm run deploy
+```
 
-- `segmentRoot`
-- `conversationRef`
-- `segmentRef`
-- `messageCount`
-- `timestamp`
-- `recorder`
+The deployed address is printed to stdout. Update the address in this README and in your client integration.
 
-The contract rejects empty roots/references and limits `messageCount` to 1-5.
+---
 
-## Security Notes
+## Design decisions
 
-- Do not commit `config.js`.
-- Do not commit `dist/`.
-- Rotate any RPC key that was committed before being moved into ignored config.
-- Keep `expectedContractAddress` set to the deployed contract you trust.
-- This verifies encrypted-message integrity, not plaintext meaning or delivery.
-- The verifier uses `textContent` for displaying user-provided JSON to reduce
-  XSS risk.
+**Batching** — up to 5 messages are hashed as a single segment rather than one transaction per message, keeping gas costs low.
+
+**User-supplied timestamp** — the caller provides when the segment was recorded, not when it was submitted to the chain. The contract rejects future timestamps.
+
+**Signature verification** — the caller must sign the hash with the same key used to send the transaction, preventing third-party spoofing.
+
+**Event log** — `DigestRecorded` is emitted on every record alongside the `records` mapping, so the verification page can query by hash or filter by recorder address.
