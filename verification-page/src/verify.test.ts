@@ -82,7 +82,7 @@ describe("verifyMessageBatch", () => {
       "Invalid JSON. Please provide a valid message batch.",
     );
     expect(() => parseMessageBatch("{}")).to.throw(
-      "Message batch must be an array of messages",
+      "Message batch must contain a messages array",
     );
   });
 

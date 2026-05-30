@@ -10,6 +10,6 @@ export default defineConfig({
     emptyOutDir: true,
   },
   test: {
-    include: ["verification-page/src/**/*.test.ts", "verification-page/src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
 });
