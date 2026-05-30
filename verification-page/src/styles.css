@@ -235,7 +235,7 @@ textarea:focus {
   background: #ffffff;
 }
 
-.proof-panel,
+.batch-panel,
 .result-panel {
   display: flex;
   flex-direction: column;

@@ -18,23 +18,8 @@ export type NormalisedEnvelope = {
   sender_id: string;
 };
 
-export type Proof = {
-  segment_id?: string;
-  segment_index: number;
-  transaction_hash?: string;
-  contract_address: string;
-  chain_name?: string;
-  chain_id: number;
-  segment_hash: string;
-  envelope_hash?: string;
-  segment_hashes: string[];
-  recorded_timestamp?: number;
-  recorder?: string;
-};
-
-export type ProofPackage = {
-  envelope: Envelope;
-  proof: Proof;
+export type MessageBatchInput = {
+  envelopes: Envelope[];
 };
 
 export type OnChainRecord = {
@@ -47,8 +32,8 @@ export type OnChainRecord = {
 export type VerificationOutput = {
   ok: boolean;
   message: string;
-  canonicalEnvelope?: string;
-  computedEnvelopeHash?: string;
+  canonicalEnvelopes?: string[];
+  computedEnvelopeHashes?: string[];
   computedSegmentHash?: string;
   onChainRecord?: OnChainRecord;
 };

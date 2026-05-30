@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { getAddress } from "ethers";
-import type { ProofPackage } from "../verification-page/src/types";
+import type { MessageBatchInput } from "../verification-page/src/types";
 
 const fetchSegmentRecordMock = vi.fn();
 const defaultContractAddress = "0x699a37c68c99DF26b179b98811F5d25597FBA816";
@@ -12,39 +12,38 @@ const contractAddress = getAddress(
 );
 
 vi.mock("../verification-page/src/blockchain", () => ({
-  SEPOLIA_CHAIN_ID: 11155111,
   fetchSegmentRecord: fetchSegmentRecordMock,
 }));
 
 const envelopeHash = "0x6a8c5f7af40f9a35ee4d36c03b57d6e26b1597a789133707a10736306d9ed70f";
-const segmentHash = "0x172d2b4547aa5f7b7ba88889b824ee060e840be8c5d7e1326d5df4c4fc8bd205";
+const olderEnvelopeHash = "0x90b8b00dd28da3e68bd0e7a4f5365f968b49c83471d48b41f2119d069614f50c";
+const segmentHash = "0x63e159c55de26d1765ddf95e0cda467b666537e143d104a9d626eb04dd1bedc2";
 const recorder = "0x1111111111111111111111111111111111111111";
 
-const validPackage: ProofPackage = {
-  envelope: {
-    ciphertext: "ciphertext-base64",
-    conversation_id: "direct-1-2",
-    message_id: 7,
-    ratchet_header_enc: "header-base64",
-    recipient_id: 2,
-    schema_version: "securemsg-envelope-v1",
-    sender_id: 1,
-  },
-  proof: {
-    segment_index: 0,
-    transaction_hash: "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    contract_address: contractAddress,
-    chain_name: "sepolia",
-    chain_id: 11155111,
-    segment_hash: segmentHash,
-    envelope_hash: envelopeHash,
-    segment_hashes: [envelopeHash],
-    recorded_timestamp: 1710000000,
-    recorder,
-  },
+const validBatch: MessageBatchInput = {
+  envelopes: [
+    {
+      ciphertext: "ciphertext-base64",
+      conversation_id: "direct-1-2",
+      message_id: 7,
+      ratchet_header_enc: "header-base64",
+      recipient_id: 2,
+      schema_version: "securemsg-envelope-v1",
+      sender_id: 1,
+    },
+    {
+      ciphertext: "older-ciphertext",
+      conversation_id: "direct-1-2",
+      message_id: 3,
+      ratchet_header_enc: "older-header",
+      recipient_id: 2,
+      schema_version: "securemsg-envelope-v1",
+      sender_id: 1,
+    },
+  ],
 };
 
-describe("verifyProofPackage", () => {
+describe("verifyMessageBatch", () => {
   beforeEach(() => {
     fetchSegmentRecordMock.mockReset();
     fetchSegmentRecordMock.mockResolvedValue({
@@ -55,13 +54,13 @@ describe("verifyProofPackage", () => {
     });
   });
 
-  it("accepts a valid proof package with a matching on-chain record", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
+  it("accepts a valid batch with a matching on-chain record", async () => {
+    const { verifyMessageBatch } = await import("../verification-page/src/verify");
 
-    const result = await verifyProofPackage(validPackage, "https://rpc.example");
+    const result = await verifyMessageBatch(validBatch, "https://rpc.example");
 
     expect(result.ok).to.equal(true);
-    expect(result.computedEnvelopeHash).to.equal(envelopeHash);
+    expect(result.computedEnvelopeHashes).to.deep.equal([olderEnvelopeHash, envelopeHash]);
     expect(result.computedSegmentHash).to.equal(segmentHash);
     expect(fetchSegmentRecordMock).toHaveBeenCalledWith(
       "https://rpc.example",
@@ -70,79 +69,44 @@ describe("verifyProofPackage", () => {
     );
   });
 
-  it("rejects proof packages for the wrong chain", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
-    const packageData = {
-      ...validPackage,
-      proof: { ...validPackage.proof, chain_id: 1 },
-    };
-
-    await expect(verifyProofPackage(packageData, "")).rejects.toThrow(
-      "Proof chain_id must be Sepolia 11155111",
-    );
-  });
-
-  it("rejects proof packages for a different contract", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
-    const packageData = {
-      ...validPackage,
-      proof: {
-        ...validPackage.proof,
-        contract_address: "0x2222222222222222222222222222222222222222",
-      },
-    };
-
-    await expect(verifyProofPackage(packageData, "")).rejects.toThrow(
-      "Proof contract address does not match the trusted contract",
-    );
-    expect(fetchSegmentRecordMock).not.toHaveBeenCalled();
-  });
-
-  it("rejects malformed segment hash lists before reading the blockchain", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
-    const packageData = {
-      ...validPackage,
-      proof: { ...validPackage.proof, segment_hashes: ["0x1234"] },
-    };
-
-    await expect(verifyProofPackage(packageData, "")).rejects.toThrow(
-      "Every proof segment_hashes entry must be bytes32",
-    );
-    expect(fetchSegmentRecordMock).not.toHaveBeenCalled();
-  });
-
-  it("returns a failed result when the on-chain timestamp does not match", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
+  it("returns a failed result when the computed batch hash is not on-chain", async () => {
+    const { verifyMessageBatch } = await import("../verification-page/src/verify");
     fetchSegmentRecordMock.mockResolvedValue({
       segment_hash: segmentHash,
       recorder,
-      timestamp: 1710000001,
-      recorded: true,
+      timestamp: 0,
+      recorded: false,
     });
 
-    const result = await verifyProofPackage(validPackage, "");
+    const result = await verifyMessageBatch(validBatch, "");
 
     expect(result.ok).to.equal(false);
-    expect(result.message).to.equal("Proof timestamp does not match the on-chain record");
+    expect(result.message).to.equal("Message batch hash has not been recorded on Sepolia");
   });
 
-  it("rejects malformed recorder addresses with a clear error", async () => {
-    const { verifyProofPackage } = await import("../verification-page/src/verify");
-    const packageData = {
-      ...validPackage,
-      proof: { ...validPackage.proof, recorder: "not-an-address" },
-    };
+  it("rejects malformed batch JSON", async () => {
+    const { parseMessageBatch } = await import("../verification-page/src/verify");
 
-    await expect(verifyProofPackage(packageData, "")).rejects.toThrow(
-      "Proof recorder is invalid",
+    expect(() => parseMessageBatch("not json")).to.throw(
+      "Invalid JSON. Please provide a valid message batch.",
+    );
+    expect(() => parseMessageBatch("{}")).to.throw(
+      "Message batch must be an array of envelopes",
     );
   });
 
-  it("rejects proof package JSON that is too large", async () => {
-    const { parseProofPackage } = await import("../verification-page/src/verify");
+  it("parses either an envelope array or an object with envelopes", async () => {
+    const { parseMessageBatch } = await import("../verification-page/src/verify");
 
-    expect(() => parseProofPackage(" ".repeat(256 * 1024 + 1))).to.throw(
-      "Proof package JSON is too large",
+    expect(parseMessageBatch(JSON.stringify(validBatch)).envelopes).to.have.length(2);
+    expect(parseMessageBatch(JSON.stringify(validBatch.envelopes)).envelopes).to.have.length(2);
+  });
+
+  it("rejects message batch JSON that is too large", async () => {
+    const { parseMessageBatch } = await import("../verification-page/src/verify");
+
+    expect(() => parseMessageBatch(" ".repeat(256 * 1024 + 1))).to.throw(
+      "Message batch JSON is too large",
     );
   });
 });

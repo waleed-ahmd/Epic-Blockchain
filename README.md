@@ -29,11 +29,10 @@ The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.jso
 ## Web verifier
 
 The independent verification interface lives in `verification-page/` as a React
-and TypeScript app. It is read-only: it canonicalises encrypted envelopes,
-rebuilds the segment hash, and reads `getRecord(hash)` from the Sepolia contract.
-The verifier only accepts proof packages for the trusted contract address
-configured in `.env`. The main client is responsible for calling `recordDigest`
-when a segment closes.
+and TypeScript app. It is read-only: it accepts a batch of encrypted envelopes,
+sorts them by `message_id`, rebuilds the segment hash, and reads
+`getRecord(hash)` from the Sepolia contract. The main client is responsible for
+calling `recordDigest` when a segment closes.
 
 Run it locally:
 
@@ -124,6 +123,30 @@ npm run deploy
 
 The deployed address is printed to stdout. Update `VITE_CONTRACT_ADDRESS`, this
 README, and the client integration.
+
+## Web Verifier Input
+
+Paste either an array of encrypted envelopes or an object with an `envelopes`
+array:
+
+```json
+{
+  "envelopes": [
+    {
+      "schema_version": "securemsg-envelope-v1",
+      "conversation_id": "direct-1-2",
+      "message_id": "1",
+      "sender_id": "1",
+      "recipient_id": "2",
+      "ciphertext": "...",
+      "ratchet_header_enc": "..."
+    }
+  ]
+}
+```
+
+The verifier sorts envelopes by `message_id` before hashing. Alice's client must
+use the same ordering rule before recording the segment hash on-chain.
 
 ---
 

@@ -29,6 +29,21 @@ function requireNonEmptyString(value: unknown, fieldName: string): asserts value
   }
 }
 
+function assertMessageIdOrderable(messageId: string): void {
+  if (!/^(0|[1-9]\d*)$/.test(messageId)) {
+    throw new Error("message_id must be a non-negative integer");
+  }
+}
+
+function compareMessageIds(left: NormalisedEnvelope, right: NormalisedEnvelope): number {
+  const leftId = BigInt(left.message_id);
+  const rightId = BigInt(right.message_id);
+
+  if (leftId < rightId) return -1;
+  if (leftId > rightId) return 1;
+  return 0;
+}
+
 export function normaliseEnvelope(envelope: Envelope): NormalisedEnvelope {
   if (!envelope || typeof envelope !== "object" || Array.isArray(envelope)) {
     throw new Error("Envelope must be a JSON object");
@@ -52,6 +67,7 @@ export function normaliseEnvelope(envelope: Envelope): NormalisedEnvelope {
     requireNonEmptyString(normalised[field], String(field));
   }
 
+  assertMessageIdOrderable(normalised.message_id);
   return normalised;
 }
 
@@ -68,6 +84,52 @@ export function canonicaliseEnvelope(envelope: Envelope): string {
 
 export function computeEnvelopeHash(envelope: Envelope): string {
   return ethers.keccak256(ethers.toUtf8Bytes(canonicaliseEnvelope(envelope)));
+}
+
+export function sortEnvelopesByMessageId(envelopes: Envelope[]): Envelope[] {
+  if (!Array.isArray(envelopes) || envelopes.length === 0) {
+    throw new Error("At least one envelope is required");
+  }
+
+  if (envelopes.length > MAX_SEGMENT_ENVELOPES) {
+    throw new Error(`A segment cannot contain more than ${MAX_SEGMENT_ENVELOPES} envelopes`);
+  }
+
+  const normalised = envelopes.map((envelope, index) => ({
+    envelope,
+    index,
+    normalised: normaliseEnvelope(envelope),
+  }));
+  const seenMessageIds = new Set<string>();
+
+  for (const item of normalised) {
+    if (seenMessageIds.has(item.normalised.message_id)) {
+      throw new Error("message_id values must be unique within a segment");
+    }
+    seenMessageIds.add(item.normalised.message_id);
+  }
+
+  return normalised
+    .sort((left, right) => compareMessageIds(left.normalised, right.normalised) || left.index - right.index)
+    .map((item) => item.envelope);
+}
+
+export function computeSegmentHashFromEnvelopes(envelopes: Envelope[]): {
+  sortedEnvelopes: Envelope[];
+  canonicalEnvelopes: string[];
+  envelopeHashes: string[];
+  segmentHash: string;
+} {
+  const sortedEnvelopes = sortEnvelopesByMessageId(envelopes);
+  const canonicalEnvelopes = sortedEnvelopes.map(canonicaliseEnvelope);
+  const envelopeHashes = sortedEnvelopes.map((envelope) => computeEnvelopeHash(envelope));
+
+  return {
+    sortedEnvelopes,
+    canonicalEnvelopes,
+    envelopeHashes,
+    segmentHash: computeSegmentHashFromEnvelopeHashes(envelopeHashes),
+  };
 }
 
 export function computeSegmentHashFromEnvelopeHashes(envelopeHashes: string[]): string {

@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { DEFAULT_SEPOLIA_RPC_URL } from "./blockchain";
-import { parseProofPackage, verifyProofPackage } from "./verify";
+import { parseMessageBatch, verifyMessageBatch } from "./verify";
 import type { VerificationOutput } from "./types";
 import "./styles.css";
 
@@ -8,10 +8,10 @@ const OUTPUT_SECTIONS: Array<{
   label: string;
   getValue: (result: VerificationOutput | null) => unknown;
 }> = [
-  { label: "Envelope hash", getValue: (result) => result?.computedEnvelopeHash },
+  { label: "Envelope hashes", getValue: (result) => result?.computedEnvelopeHashes },
   { label: "Segment hash", getValue: (result) => result?.computedSegmentHash },
   { label: "On-chain record", getValue: (result) => result?.onChainRecord },
-  { label: "Canonical envelope", getValue: (result) => result?.canonicalEnvelope },
+  { label: "Canonical envelopes", getValue: (result) => result?.canonicalEnvelopes },
 ];
 
 function JsonBlock({ value }: { value: unknown }) {
@@ -53,7 +53,7 @@ function Footer() {
 }
 
 export default function App() {
-  const [proofJson, setProofJson] = useState("");
+  const [batchJson, setBatchJson] = useState("");
   const [rpcUrl, setRpcUrl] = useState(DEFAULT_SEPOLIA_RPC_URL);
   const [result, setResult] = useState<VerificationOutput | null>(null);
   const [status, setStatus] = useState("Not verified yet.");
@@ -65,8 +65,8 @@ export default function App() {
     setResult(null);
 
     try {
-      const packageData = parseProofPackage(proofJson);
-      const output = await verifyProofPackage(packageData, rpcUrl);
+      const packageData = parseMessageBatch(batchJson);
+      const output = await verifyMessageBatch(packageData, rpcUrl);
       setResult(output);
       setStatus(output.ok ? "PASS" : "FAIL");
     } catch (error) {
@@ -81,7 +81,7 @@ export default function App() {
   }
 
   function clearForm() {
-    setProofJson("");
+    setBatchJson("");
     setResult(null);
     setStatus("Not verified yet.");
   }
@@ -93,8 +93,8 @@ export default function App() {
       <div className="app-shell">
         <section className="page-title">
           <div>
-            <h1>Verify proof package</h1>
-            <p>Paste a proof package to confirm its digest and on-chain record.</p>
+            <h1>Verify message batch</h1>
+            <p>Paste received message envelopes to rebuild the batch hash.</p>
           </div>
           <span className="network-pill">Sepolia</span>
         </section>
@@ -110,16 +110,16 @@ export default function App() {
         </details>
 
         <section className="workspace">
-          <section className="panel proof-panel">
+          <section className="panel batch-panel">
             <div className="panel-header">
               <div>
-                <h2>Proof package</h2>
+                <h2>Message batch</h2>
               </div>
             </div>
             <textarea
-              value={proofJson}
-              onChange={(event) => setProofJson(event.target.value)}
-              placeholder="Paste proof package JSON here"
+              value={batchJson}
+              onChange={(event) => setBatchJson(event.target.value)}
+              placeholder="Paste message envelopes JSON here"
               spellCheck={false}
             />
             <div className="actions">
@@ -139,7 +139,7 @@ export default function App() {
               </div>
             </div>
             <div className={`result ${result?.ok ? "pass" : result ? "fail" : ""}`}>
-              {result?.message || "Waiting for proof package."}
+              {result?.message || "Waiting for message batch."}
             </div>
             <div className="result-stack">
               {OUTPUT_SECTIONS.map((section) => (
