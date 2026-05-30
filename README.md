@@ -1,18 +1,19 @@
 # SecureMsg Message Integrity Contract
 
-A Solidity smart contract that records keccak256 hashes of SecureMsg conversation segments on-chain, providing tamper-evident proof of the messages.
+A Solidity smart contract that records keccak256 hashes of SecureMsg message batches on-chain, providing tamper-evident proof of the messages.
 
 ## What it does
 
-5 messages are batched up into a segment then the client:
+Up to 5 messages are batched together, then the client:
 
-1. Computes a keccak256 hash of the segments
-2. Signs the hash with their wallet private key
-3. Calls `recordDigest` on the contract, submitting the hash, signature, and the timestamp of when the segment was recorded
+1. Sorts the messages by numeric `message_id`
+2. Computes a keccak256 `messages_hash` from the batch
+3. Signs the hash with their wallet private key
+4. Calls `recordDigest` on the contract, submitting the hash, signature, and the timestamp of when the batch was recorded
 
 The contract verifies the signature matches the caller, stores the record on-chain, and emits a `DigestRecorded` event. The transaction hash from the receipt is stored client-side for later verification.
 
-To verify a segment later, anyone can call `getRecord(hash)` with the segment hash and receive the recorder address and timestamp — no third party needed.
+To verify a batch later, anyone can call `getRecord(hash)` with the `messages_hash` and receive the recorder address and timestamp — no third party needed.
 
 ---
 
@@ -29,10 +30,10 @@ The ABI is generated at `abi/contracts/MessageIntegrity.sol/MessageIntegrity.jso
 ## Web verifier
 
 The independent verification interface lives in `verification-page/` as a React
-and TypeScript app. It is read-only: it accepts a batch of encrypted envelopes,
-sorts them by `message_id`, rebuilds the segment hash, and reads
+and TypeScript app. It is read-only: it accepts a batch of encrypted messages,
+sorts them by `message_id`, rebuilds the `messages_hash`, and reads
 `getRecord(hash)` from the Sepolia contract. The main client is responsible for
-calling `recordDigest` when a segment closes.
+calling `recordDigest` when a batch closes.
 
 Run it locally:
 
@@ -52,13 +53,13 @@ npm run build
 
 ### `recordDigest(bytes32 hash, bytes signature, uint64 timestamp)`
 
-Records a segment hash on-chain.
+Records a message batch hash on-chain.
 
 | Parameter   | Description                                                                                        |
 |-------------|----------------------------------------------------------------------------------------------------|
-| `hash`      | keccak256 hash of the conversation segment                                                         |
+| `hash`      | keccak256 hash of the message batch                                                         |
 | `signature` | EIP-191 signature of `hash` produced by the caller's private key                                   |
-| `timestamp` | Unix timestamp (seconds) of when the segment was recorded — must be non-zero and not in the future |
+| `timestamp` | Unix timestamp (seconds) of when the batch was recorded — must be non-zero and not in the future |
 
 Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 timestamp)`.
 
@@ -66,7 +67,7 @@ Emits `DigestRecorded(bytes32 indexed hash, address indexed recorder, uint64 tim
 
 ### `getRecord(bytes32 hash) → (address recorder, uint64 timestamp)`
 
-Retrieves the on-chain record for a segment hash. Free to call (no gas) from off-chain. Returns `(address(0), 0)` if the hash has not been recorded.
+Retrieves the on-chain record for a message batch hash. Free to call (no gas) from off-chain. Returns `(address(0), 0)` if the hash has not been recorded.
 
 | Return value | Description                            |
 |--------------|----------------------------------------|
@@ -112,7 +113,6 @@ npx hardhat compile
 
 ```bash
 npm test
-npm run test:web
 ```
 
 ### Deploy to Sepolia
@@ -126,35 +126,31 @@ README, and the client integration.
 
 ## Web Verifier Input
 
-Paste either an array of encrypted envelopes or an object with an `envelopes`
-array:
+Paste either an array of encrypted messages or an object with a `messages` array:
 
 ```json
 {
-  "envelopes": [
+  "messages": [
     {
-      "schema_version": "securemsg-envelope-v1",
-      "conversation_id": "direct-1-2",
-      "message_id": "1",
-      "sender_id": "1",
-      "recipient_id": "2",
-      "ciphertext": "...",
-      "ratchet_header_enc": "..."
+      "message_id": 1,
+      "sender_public_key": "...",
+      "ciphertext": "..."
     }
   ]
 }
 ```
 
-The verifier sorts envelopes by `message_id` before hashing. Alice's client must
-use the same ordering rule before recording the segment hash on-chain.
+The verifier sorts messages by numeric `message_id` before hashing. The sending
+client must use the same ordering rule before recording the `messages_hash`
+on-chain.
 
 ---
 
 ## Design decisions
 
-**Batching** — up to 5 messages are hashed as a single segment rather than one transaction per message, keeping gas costs low.
+**Batching** — up to 5 messages are hashed into one `messages_hash` rather than one transaction per message, keeping gas costs low.
 
-**User-supplied timestamp** — the caller provides when the segment was recorded, not when it was submitted to the chain. The contract rejects future timestamps.
+**User-supplied timestamp** — the caller provides when the batch was recorded, not when it was submitted to the chain. The contract rejects future timestamps.
 
 **Signature verification** — the caller must sign the hash with the same key used to send the transaction, preventing third-party spoofing.
 

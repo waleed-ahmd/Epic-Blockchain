@@ -27,24 +27,24 @@ function normaliseRpcUrl(rpcUrl: string): string {
     throw new Error("RPC URL is invalid");
   }
 
-  if (parsed.protocol !== "https:" ) {
+  if (parsed.protocol !== "https:") {
     throw new Error("RPC URL must use https");
   }
 
   return parsed.toString();
 }
 
-export async function fetchSegmentRecord(
+export async function fetchMessagesHashRecord(
   rpcUrl: string,
   contractAddress: string,
-  segmentHash: string,
-): Promise<OnChainRecord> {
+  messagesHash: string,
+): Promise<OnChainRecord | null> {
   if (!ethers.isAddress(contractAddress)) {
     throw new Error("Contract address is invalid");
   }
 
-  if (!ethers.isHexString(segmentHash, 32)) {
-    throw new Error("Segment hash must be a bytes32 hex string");
+  if (!ethers.isHexString(messagesHash, 32)) {
+    throw new Error("Messages hash must be a bytes32 hex string");
   }
 
   const provider = new ethers.JsonRpcProvider(normaliseRpcUrl(rpcUrl));
@@ -55,13 +55,16 @@ export async function fetchSegmentRecord(
   }
 
   const contract = new ethers.Contract(contractAddress, MESSAGE_INTEGRITY_ABI, provider);
-  const [recorder, timestamp] = await contract.getRecord(segmentHash);
+  const [recorder, timestamp] = await contract.getRecord(messagesHash);
   const numericTimestamp = Number(timestamp);
 
+  if (numericTimestamp === 0) {
+    return null;
+  }
+
   return {
-    segment_hash: segmentHash,
+    messages_hash: messagesHash,
     recorder,
     timestamp: numericTimestamp,
-    recorded: numericTimestamp !== 0,
   };
 }

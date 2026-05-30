@@ -6,8 +6,8 @@
     "dev": "vite --host 127.0.0.1",
     "build": "vite build",
     "compile": "hardhat compile",
-    "test": "hardhat test test/MessageIntegrity.test.ts",
-    "test:web": "vitest run --root . test/digest.test.ts test/verify.test.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "hardhat test test/MessageIntegrity.test.ts && vitest run --root . test/hashMessages.test.ts test/verify.test.ts",
     "deploy": "HARDHAT_NETWORK=sepolia hardhat run scripts/deploy.ts"
   },
   "devDependencies": {

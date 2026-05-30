@@ -6,9 +6,9 @@ import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title MessageIntegrity
- * @notice Records keccak256 hashes of 5 messages on-chain.
+ * @notice Records keccak256 hashes of message batches on-chain.
  *
- * The caller signs the hash of 5 messages off-chain and submits it with their signature.
+ * The caller signs the messages_hash off-chain and submits it with their signature.
  * The contract verifies the signature matches msg.sender, stores the timestamp,
  * and proves identity by providing a retrievable on-chain record.
  */
@@ -31,10 +31,10 @@ contract MessageIntegrity {
     error SignerMismatch();
 
     /**
-     * @notice Records the hash of 5 messages. The caller must have signed the hash.
-     * @param hash    keccak256 hash of 5 messages.
+     * @notice Records a message batch hash. The caller must have signed the hash.
+     * @param hash      keccak256 messages_hash for the batch.
      * @param signature EIP-191 signature of hash produced by msg.sender's key.
-     * @param timestamp Unix timestamp (seconds) when the conversation segment was recorded.
+     * @param timestamp Unix timestamp (seconds) when the message batch was recorded.
      */
     function recordDigest(bytes32 hash, bytes calldata signature, uint64 timestamp) external {
         if (hash == bytes32(0)) revert EmptyHash();
@@ -51,8 +51,8 @@ contract MessageIntegrity {
     }
 
     /**
-     * @notice Retrieve the on-chain record for a given segment hash.
-     * @param hash keccak256 hash of the conversation segment.
+     * @notice Retrieve the on-chain record for a given message batch hash.
+     * @param hash keccak256 messages_hash for the batch.
      * @return recorder  The address that submitted this hash.
      * @return timestamp The block timestamp when it was recorded (0 if not found).
      */

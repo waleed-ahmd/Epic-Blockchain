@@ -1,39 +1,39 @@
-export type Envelope = {
-  ciphertext: string;
-  conversation_id: string;
-  message_id: string | number;
-  ratchet_header_enc: string;
-  recipient_id: string | number;
-  schema_version: string;
-  sender_id: string | number;
-};
+export type MessageForVerification = {
+  /** Used only to sort the batch in ascending order before hashing. */
+  message_id: number;
 
-export type NormalisedEnvelope = {
+  /** Binds the encrypted message to the sender key without relying on a mutable display name. */
+  sender_public_key: string;
+
+  /** The encrypted message content committed into the batch hash. */
   ciphertext: string;
-  conversation_id: string;
-  message_id: string;
-  ratchet_header_enc: string;
-  recipient_id: string;
-  schema_version: string;
-  sender_id: string;
 };
 
 export type MessageBatchInput = {
-  envelopes: Envelope[];
+  messages: MessageForVerification[];
 };
 
 export type OnChainRecord = {
-  segment_hash: string;
+  messages_hash: string;
   recorder: string;
   timestamp: number;
-  recorded: boolean;
 };
 
-export type VerificationOutput = {
-  ok: boolean;
-  message: string;
-  canonicalEnvelopes?: string[];
-  computedEnvelopeHashes?: string[];
-  computedSegmentHash?: string;
-  onChainRecord?: OnChainRecord;
+type VerificationBase = {
+  statusMessage: string;
+  canonicalMessages?: string[];
+  computedMessageHashes?: string[];
+  computedMessagesHash?: string;
 };
+
+export type VerificationSuccess = VerificationBase & {
+  ok: true;
+  onChainRecord: OnChainRecord;
+};
+
+export type VerificationFailure = VerificationBase & {
+  ok: false;
+  onChainRecord?: never;
+};
+
+export type VerificationOutput = VerificationSuccess | VerificationFailure;

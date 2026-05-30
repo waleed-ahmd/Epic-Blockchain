@@ -1,7 +1,7 @@
 import { ethers } from "ethers";
-import { fetchSegmentRecord } from "./blockchain";
-import { computeSegmentHashFromEnvelopes } from "./digest";
-import type { Envelope, MessageBatchInput, VerificationOutput } from "./types";
+import { fetchMessagesHashRecord } from "./blockchain";
+import { computeMessagesHashFromMessages } from "./hashMessages";
+import type { MessageBatchInput, MessageForVerification, VerificationOutput } from "./types";
 
 const DEFAULT_MESSAGE_INTEGRITY_ADDRESS = "0x699a37c68c99DF26b179b98811F5d25597FBA816";
 const MAX_MESSAGE_BATCH_BYTES = 256 * 1024;
@@ -22,15 +22,15 @@ function trustedContractAddress(): string {
 
 export const TRUSTED_MESSAGE_INTEGRITY_ADDRESS = trustedContractAddress();
 
-function assertEnvelopeArray(value: unknown): asserts value is Envelope[] {
+function assertMessageArray(value: unknown): asserts value is MessageForVerification[] {
   if (!Array.isArray(value)) {
-    throw new Error("Message batch must be an array of envelopes");
+    throw new Error("Message batch must be an array of messages");
   }
 }
 
 function normaliseBatchInput(value: unknown): MessageBatchInput {
   if (Array.isArray(value)) {
-    return { envelopes: value };
+    return { messages: value };
   }
 
   if (!value || typeof value !== "object") {
@@ -38,8 +38,8 @@ function normaliseBatchInput(value: unknown): MessageBatchInput {
   }
 
   const batch = value as Partial<MessageBatchInput>;
-  assertEnvelopeArray(batch.envelopes);
-  return { envelopes: batch.envelopes };
+  assertMessageArray(batch.messages);
+  return { messages: batch.messages };
 }
 
 export function parseMessageBatch(raw: string): MessageBatchInput {
@@ -65,32 +65,31 @@ export async function verifyMessageBatch(
   batch: MessageBatchInput,
   rpcUrl: string,
 ): Promise<VerificationOutput> {
-  const { canonicalEnvelopes, envelopeHashes, segmentHash } = computeSegmentHashFromEnvelopes(
-    batch.envelopes,
+  const { canonicalMessages, messageHashes, messagesHash } = computeMessagesHashFromMessages(
+    batch.messages,
   );
-  const onChainRecord = await fetchSegmentRecord(
+  const onChainRecord = await fetchMessagesHashRecord(
     rpcUrl,
     TRUSTED_MESSAGE_INTEGRITY_ADDRESS,
-    segmentHash,
+    messagesHash,
   );
 
-  if (!onChainRecord.recorded) {
+  if (!onChainRecord) {
     return {
       ok: false,
-      message: "Message batch hash has not been recorded on Sepolia",
-      canonicalEnvelopes,
-      computedEnvelopeHashes: envelopeHashes,
-      computedSegmentHash: segmentHash,
-      onChainRecord,
+      statusMessage: "Message batch hash has not been recorded on Sepolia",
+      canonicalMessages,
+      computedMessageHashes: messageHashes,
+      computedMessagesHash: messagesHash,
     };
   }
 
   return {
     ok: true,
-    message: "Message batch is valid and matches the Sepolia record",
-    canonicalEnvelopes,
-    computedEnvelopeHashes: envelopeHashes,
-    computedSegmentHash: segmentHash,
+    statusMessage: "Message batch is valid and matches the Sepolia record",
+    canonicalMessages,
+    computedMessageHashes: messageHashes,
+    computedMessagesHash: messagesHash,
     onChainRecord,
   };
 }

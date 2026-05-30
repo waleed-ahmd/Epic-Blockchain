@@ -3,7 +3,7 @@ import { network } from "hardhat";
 import { keccak256, toUtf8Bytes, ZeroHash, getBytes } from "ethers";
 import { MessageIntegrity__factory } from "../typechain-types/index.js";
 
-const VALID_HASH = keccak256(toUtf8Bytes("test message segment"));
+const VALID_HASH = keccak256(toUtf8Bytes("test message batch"));
 const PAST_TIMESTAMP = BigInt(Math.floor(Date.now() / 1000) - 60);
 
 describe("MessageIntegrity", () => {
